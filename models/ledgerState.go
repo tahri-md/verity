@@ -1,22 +1,16 @@
 package models
 
-import "sync"
+import "time"
 
 type LedgerState struct {
-	mu sync.RWMutex
-
-	Accounts     map[string]*Account
-	Transactions map[string]*Transaction
-	Blocks       map[uint64]*Block
-
-	LatestBlock uint64
+	StateHash    string    `gorm:"primaryKey" json:"state_hash"`
+	BlockNumber  uint64    `json:"block_number"`
+	StateData    string    `gorm:"type:jsonb" json:"state_data"`     // JSON-encoded state
+	RootHash     string    `json:"root_hash"`
+	Timestamp    time.Time `json:"timestamp"`
+	IsValid      bool      `json:"is_valid"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
-
-func NewLedgerState() *LedgerState {
-	return &LedgerState{
-		Accounts:     make(map[string]*Account),
-		Transactions: make(map[string]*Transaction),
-		Blocks:       make(map[uint64]*Block),
-		LatestBlock:  0,
 	}
 }
