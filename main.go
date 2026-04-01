@@ -2,7 +2,9 @@ package main
 
 import (
 	"database/sql"
+	"log"
 	"gin-minimal/config"
+	"gin-minimal/middleware"
 	"gin-minimal/models"
 	"gin-minimal/routes"
 
@@ -25,6 +27,16 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
+	// Initialize Redis
+	redisClient, err := config.InitRedis("localhost:6379")
+	if err != nil {
+		log.Printf("Warning: Redis connection failed: %v. Continuing without cache.", err)
+	} else {
+		log.Println("Redis connected successfully")
+		defer redisClient.CloseConnection()
+	}
+
 	db.AutoMigrate(
 		&models.Transaction{},
 		&models.Account{},
@@ -34,6 +46,7 @@ func main() {
 		&models.LedgerState{},
 	)
 	router := gin.Default()
+	router.Use(middleware.ErrorMiddleware())
 	routes.RegisterAuthRoutes(router, db)
 	routes.RegisterTransactionRoutes(router, db)
 	routes.RegisterAccountRoutes(router, db)
