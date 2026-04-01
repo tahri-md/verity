@@ -31,6 +31,7 @@ func main() {
 		&models.Block{},
 		&models.ConsensusState{},
 		&models.AuditEvent{},
+		&models.LedgerState{},
 	)
 	router := gin.Default()
 	routes.RegisterAuthRoutes(router, db)
@@ -39,6 +40,7 @@ func main() {
 	routes.RegisterBlockRoutes(router, db)
 	routes.RegisterConsensusRoutes(router, db)
 	routes.RegisterAuditRoutes(router, db)
+	routes.RegisterLedgerRoutes(router, db)
 	router.Run(":8080")
 	// r.GET("/hello", func(c *gin.Context) {
 	// 	c.JSON(200, gin.H{
