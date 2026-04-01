@@ -3,6 +3,7 @@ package crypto
 import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -130,4 +131,57 @@ func VerifyMerkleProof(txHash string, proof []models.ProofNode, root string) boo
 	}
 
 	return computed == root
+}
+
+// GenerateKeyPair generates a new ECDSA key pair for signing transactions
+func GenerateKeyPair() (*ecdsa.PrivateKey, error) {
+	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return nil, err
+	}
+	return privateKey, nil
+}
+
+// GetPublicKeyHex returns the hex-encoded public key from a private key
+func GetPublicKeyHex(privateKey *ecdsa.PrivateKey) string {
+	pubKeyBytes := elliptic.Marshal(elliptic.P256(), privateKey.PublicKey.X, privateKey.PublicKey.Y)
+	return hex.EncodeToString(pubKeyBytes)
+}
+
+// SignTransaction signs a transaction hash with the given private key
+func SignTransaction(privateKey *ecdsa.PrivateKey, txHash string) (string, error) {
+	hashBytes, err := hex.DecodeString(txHash)
+	if err != nil {
+		return "", err
+	}
+
+	r, s, err := ecdsa.Sign(rand.Reader, privateKey, hashBytes)
+	if err != nil {
+		return "", err
+	}
+
+	// Concatenate r and s to create signature
+	rBytes := r.Bytes()
+	sBytes := s.Bytes()
+
+	// Pad to 32 bytes each if necessary
+	if len(rBytes) < 32 {
+		rBytes = append(make([]byte, 32-len(rBytes)), rBytes...)
+	}
+	if len(sBytes) < 32 {
+		sBytes = append(make([]byte, 32-len(sBytes)), sBytes...)
+	}
+
+	sigBytes := append(rBytes, sBytes...)
+	return hex.EncodeToString(sigBytes), nil
+}
+
+// VerifyTransactionSignature verifies a transaction signature
+func VerifyTransactionSignature(tx *models.Transaction) bool {
+	// Hash the transaction data for signing
+	data := tx.FromAccount + tx.ToAccount + strconv.FormatInt(tx.Amount, 10) + strconv.FormatUint(tx.Nonce, 10)
+	hash := sha256.Sum256([]byte(data))
+	hashHex := hex.EncodeToString(hash[:])
+	
+	return VerifySignature(tx.PublicKey, tx.Signature, hashHex)
 }
