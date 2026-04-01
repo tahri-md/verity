@@ -32,6 +32,7 @@ func main() {
 		&models.ConsensusState{},
 	)
 	router := gin.Default()
+	routes.RegisterAuthRoutes(router, db)
 	routes.RegisterTransactionRoutes(router, db)
 	routes.RegisterAccountRoutes(router, db)
 	routes.RegisterBlockRoutes(router, db)
