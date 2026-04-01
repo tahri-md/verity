@@ -27,9 +27,11 @@ func main() {
 	}
 	db.AutoMigrate(
 		&models.Transaction{},
+		&models.Account{},
 	)
 	router := gin.Default()
 	routes.RegisterTransactionRoutes(router, db)
+	routes.RegisterAccountRoutes(router, db)
 	router.Run(":8080")
 	// r.GET("/hello", func(c *gin.Context) {
 	// 	c.JSON(200, gin.H{
