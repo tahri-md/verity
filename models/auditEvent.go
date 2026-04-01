@@ -1,11 +1,15 @@
 package models
 
+import "time"
+
 type AuditEvent struct {
-	EventID      string `json:"event_id"`
-	EventType    string `json:"event_type"`
-	EntityType   string `json:"entity_type"`
-	EntityID     string `json:"entity_id"`
-	EventHash    string `json:"event_hash"`
-	PreviousHash string `json:"previous_hash"`
-	Timestamp    int64  `json:"timestamp"`
+	EventID    string    `gorm:"primaryKey" json:"event_id"`
+	AccountID  string    `json:"account_id"`
+	EventType  string    `json:"event_type"` // transaction, block, authentication, account, etc.
+	Action     string    `json:"action"`     // created, updated, verified, denied, etc.
+	Details    string    `json:"details"`
+	Timestamp  time.Time `json:"timestamp"`
+	EntityType string    `json:"entity_type"`
+	EntityID   string    `json:"entity_id"`
+	EventHash  string    `json:"event_hash"`
 }
