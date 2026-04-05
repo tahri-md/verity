@@ -1,6 +1,9 @@
 package routes
 
 import (
+	"net/http"
+
+	"gin-minimal/middleware"
 	"gin-minimal/models"
 	"gin-minimal/services"
 
@@ -73,21 +76,34 @@ func RegisterTransactionRoutes(r *gin.Engine, db *gorm.DB) {
 	})
 
 	protected := r.Group("/api/v1/transactions")
-	// protected.Use(AuthMiddleware())
+	protected.Use(middleware.AuthMiddleware())
 	protected.POST("", func(c *gin.Context) {
 		var transaction models.Transaction
 		if err := c.ShouldBindJSON(&transaction); err != nil {
-			c.JSON(200, gin.H{
-				"error": err.Error(),
-			})
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
+
+		accountID, err := middleware.GetAccountIDFromContext(c)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			return
+		}
+
+		// Enforce: the authenticated account is the transaction sender.
+		// If the client provided from_account, it must match the JWT.
+		if transaction.FromAccount != "" && transaction.FromAccount != accountID {
+			c.JSON(http.StatusForbidden, gin.H{"error": "from_account must match authenticated account"})
+			return
+		}
+		transaction.FromAccount = accountID
+
 		created, err := transactionService.CreateTransaction(&transaction)
 		if err != nil {
-			c.JSON(500, gin.H{"error": err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(200, created)
+		c.JSON(http.StatusCreated, created)
 	})
 
 }

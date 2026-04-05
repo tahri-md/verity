@@ -1,6 +1,7 @@
 package validators
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -103,6 +104,8 @@ func TestValidateBlockNumber(t *testing.T) {
 }
 
 func TestValidateTransaction(t *testing.T) {
+	validPubKey := "04" + strings.Repeat("0", 130)
+
 	tests := []struct {
 		from        string
 		to          string
@@ -110,14 +113,10 @@ func TestValidateTransaction(t *testing.T) {
 		pubKey      string
 		shouldErr   bool
 	}{
-		{"account_1", "account_2", 100, "a" + "0"+"b"+
-			"4fb55f3e8e1e0a7f8e1e0a7f8e1e0a7f8e1e0a7f8e1e0a7f8e1e0a7f8e1e0a7f", false},
-		{"account_1", "account_1", 100, "a" + "0"+"b"+
-			"4fb55f3e8e1e0a7f8e1e0a7f8e1e0a7f8e1e0a7f8e1e0a7f8e1e0a7f8e1e0a7f", true}, // Same from and to
-		{"", "account_2", 100, "a" + "0"+"b"+
-			"4fb55f3e8e1e0a7f8e1e0a7f8e1e0a7f8e1e0a7f8e1e0a7f8e1e0a7f8e1e0a7f", true}, // Empty from
-		{"account_1", "account_2", 0, "a" + "0"+"b"+
-			"4fb55f3e8e1e0a7f8e1e0a7f8e1e0a7f8e1e0a7f8e1e0a7f8e1e0a7f8e1e0a7f", true}, // Zero amount
+		{"account_1", "account_2", 100, validPubKey, false},
+		{"account_1", "account_1", 100, validPubKey, true}, // Same from and to
+		{"", "account_2", 100, validPubKey, true},          // Empty from
+		{"account_1", "account_2", 0, validPubKey, true},  // Zero amount
 	}
 
 	for _, test := range tests {

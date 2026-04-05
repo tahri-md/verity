@@ -32,7 +32,6 @@ func (s *AccountService) CreateAccount(account *models.Account) (*models.Account
 	if account.Balance == 0 {
 		account.Balance = 0 // Can be initialized to a default amount
 	}
-	account.Nonce = 0
 
 	if err := s.db.Create(account).Error; err != nil {
 		return nil, err

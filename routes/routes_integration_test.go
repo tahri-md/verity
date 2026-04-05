@@ -88,8 +88,12 @@ func TestGetAllAccountsRoute(t *testing.T) {
 	router, db := setupTestRouter()
 
 	accountService := services.NewAccountService(db)
-	accountService.CreateAccount(&models.Account{AccountID: "account_1", Balance: 1000})
-	accountService.CreateAccount(&models.Account{AccountID: "account_2", Balance: 2000})
+	if _, err := accountService.CreateAccount(&models.Account{AccountID: "account_1", Email: "account_1@example.com", Balance: 1000}); err != nil {
+		t.Fatalf("failed to create account_1: %v", err)
+	}
+	if _, err := accountService.CreateAccount(&models.Account{AccountID: "account_2", Email: "account_2@example.com", Balance: 2000}); err != nil {
+		t.Fatalf("failed to create account_2: %v", err)
+	}
 
 	req := httptest.NewRequest("GET", "/accounts", nil)
 	w := httptest.NewRecorder()
@@ -102,7 +106,36 @@ func TestGetAllAccountsRoute(t *testing.T) {
 }
 
 func TestCreateTransactionRoute(t *testing.T) {
-	router, _ := setupTestRouter()
+	router, db := setupTestRouter()
+
+	// Create accounts so login + transaction sender are valid
+	accountService := services.NewAccountService(db)
+	if _, err := accountService.CreateAccount(&models.Account{AccountID: "account_1", Email: "account_1@example.com", Balance: 1000}); err != nil {
+		t.Fatalf("failed to create account_1: %v", err)
+	}
+	if _, err := accountService.CreateAccount(&models.Account{AccountID: "account_2", Email: "account_2@example.com", Balance: 1000}); err != nil {
+		t.Fatalf("failed to create account_2: %v", err)
+	}
+
+	// Login (legacy path) to get JWT for account_1
+	loginReq := map[string]string{
+		"account_id": "account_1",
+		"role":       "user",
+	}
+	loginBody, _ := json.Marshal(loginReq)
+	loginHTTPReq := httptest.NewRequest("POST", "/api/auth/login", bytes.NewBuffer(loginBody))
+	loginHTTPReq.Header.Set("Content-Type", "application/json")
+	loginW := httptest.NewRecorder()
+	router.ServeHTTP(loginW, loginHTTPReq)
+	if loginW.Code != http.StatusOK {
+		t.Fatalf("Expected status 200 for login, got %d", loginW.Code)
+	}
+	var loginResp map[string]interface{}
+	_ = json.Unmarshal(loginW.Body.Bytes(), &loginResp)
+	token, _ := loginResp["token"].(string)
+	if token == "" {
+		t.Fatal("Expected token in login response")
+	}
 
 	transaction := models.Transaction{
 		TxnID:       "txn_1",
@@ -118,12 +151,13 @@ func TestCreateTransactionRoute(t *testing.T) {
 
 	req := httptest.NewRequest("POST", "/api/v1/transactions", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 
 	router.ServeHTTP(w, req)
 
-	if w.Code != http.StatusCreated && w.Code != http.StatusOK {
-		t.Errorf("Expected status 201 or 200, got %d", w.Code)
+	if w.Code != http.StatusCreated {
+		t.Errorf("Expected status 201, got %d", w.Code)
 	}
 }
 
@@ -180,8 +214,9 @@ func TestAuthLoginRoute(t *testing.T) {
 
 	// Create account first
 	accountService := services.NewAccountService(db)
-	accountService.CreateAccount(&models.Account{
+	_, _ = accountService.CreateAccount(&models.Account{
 		AccountID: "test_user",
+		Email:     "test_user@example.com",
 		Balance:   1000,
 	})
 
@@ -192,7 +227,7 @@ func TestAuthLoginRoute(t *testing.T) {
 
 	body, _ := json.Marshal(loginReq)
 
-	req := httptest.NewRequest("POST", "/auth/login", bytes.NewBuffer(body))
+	req := httptest.NewRequest("POST", "/api/auth/login", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 
