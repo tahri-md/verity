@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"errors"
 	"net/http"
 
 	"gin-minimal/middleware"
@@ -28,7 +29,11 @@ func RegisterTransactionRoutes(r *gin.Engine, db *gorm.DB) {
 		id := c.Param("id")
 		transaction, err := transactionService.GetTransactionByID(id)
 		if err != nil {
-			c.JSON(500, gin.H{"error": err.Error()})
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				c.JSON(http.StatusNotFound, gin.H{"error": "transaction not found"})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 		c.JSON(200, transaction)

@@ -34,6 +34,7 @@ function toDate(ts: number): Date {
 
 export default function TransactionDetailsPage() {
   const params = useParams()
+  const txnID = typeof params.id === 'string' ? params.id : Array.isArray(params.id) ? params.id[0] : ''
   const [transaction, setTransaction] = useState<Transaction | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -42,14 +43,22 @@ export default function TransactionDetailsPage() {
 
   const fetchTransaction = useCallback(async () => {
     try {
-      const response = await api.get(`/api/v1/transactions/${params.id}`)
+      setError('')
+
+      if (!txnID) {
+        setError('Missing transaction id')
+        return
+      }
+
+      const response = await api.get(`/api/v1/transactions/${encodeURIComponent(txnID)}`)
       setTransaction(response.data)
     } catch (err: any) {
-      setError('Failed to load transaction')
+      const serverErr = err?.response?.data?.error || err?.response?.data?.message
+      setError(serverErr ? String(serverErr) : 'Failed to load transaction')
     } finally {
       setLoading(false)
     }
-  }, [params.id])
+  }, [txnID])
 
   useEffect(() => {
     fetchTransaction()
