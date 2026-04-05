@@ -73,7 +73,7 @@ func (rc *RedisClient) Incr(ctx context.Context, key string) (int64, error) {
 
 // IncrBy increments the value of a key by decrement
 func (rc *RedisClient) IncrBy(ctx context.Context, key string, increment int64) (int64, error) {
-	return rc.client.IncrBy(ctx, key).Result()
+	return rc.client.IncrBy(ctx, key, increment).Result()
 }
 
 // Decr decrements the value of a key

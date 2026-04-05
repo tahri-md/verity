@@ -163,3 +163,13 @@ func (s *LedgerService) GetLedgerStateHistory(blockNumber uint64, depth int) ([]
 
 	return states, nil
 }
+
+// VerifyLedgerIntegrity verifies the integrity of a ledger state by its hash
+func (s *LedgerService) VerifyLedgerIntegrity(stateHash string) (bool, error) {
+	state, err := s.GetLedgerStateByHash(stateHash)
+	if err != nil {
+		return false, err
+	}
+
+	return s.ValidateLedgerState(state)
+}

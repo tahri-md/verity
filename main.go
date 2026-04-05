@@ -3,11 +3,13 @@ package main
 import (
 	"database/sql"
 	"log"
+	"time"
 	"gin-minimal/config"
 	"gin-minimal/middleware"
 	"gin-minimal/models"
 	"gin-minimal/routes"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
@@ -46,6 +48,17 @@ func main() {
 		&models.LedgerState{},
 	)
 	router := gin.Default()
+	
+	// Add CORS middleware
+	router.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"http://localhost:3000", "http://localhost:3001", "http://localhost:3002", "http://127.0.0.1:3000", "http://127.0.0.1:3001", "http://127.0.0.1:3002"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Content-Type", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}))
+	
 	router.Use(middleware.ErrorMiddleware())
 	routes.RegisterAuthRoutes(router, db)
 	routes.RegisterTransactionRoutes(router, db)

@@ -1,9 +1,15 @@
 package services
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"gin-minimal/models"
 	"gorm.io/gorm"
+	"golang.org/x/crypto/bcrypt"
+	"regexp"
 )
 
 type AccountService struct {
@@ -102,4 +108,124 @@ func (s *AccountService) DeleteAccount(accountID string) error {
 		return err
 	}
 	return nil
+}
+
+// SignupAccount creates a new account with email and password (for user registration)
+func (s *AccountService) SignupAccount(email, name, password string) (*models.Account, error) {
+	// Validate email format
+	emailRegex := `^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`
+	matched, _ := regexp.MatchString(emailRegex, email)
+	if !matched {
+		return nil, errors.New("invalid email format")
+	}
+
+	// Check if email already exists
+	var existing models.Account
+	if err := s.db.First(&existing, "email = ?", email).Error; err == nil {
+		return nil, errors.New("email already registered")
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+
+	// Validate password  strength
+	if len(password) < 8 {
+		return nil, errors.New("password must be at least 8 characters")
+	}
+
+	// Hash password using bcrypt
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, err
+	}
+
+	// Generate unique account ID
+	accountID, err := generateAccountID()
+	if err != nil {
+		return nil, err
+	}
+
+	// Generate ECDSA key pair for blockchain operations
+	publicKeyHex, err := generatePublicKey()
+	if err != nil {
+		return nil, errors.New("failed to generate cryptographic keys")
+	}
+
+	// Convert public key hex to bytes
+	publicKeyBytes, err := hex.DecodeString(publicKeyHex)
+	if err != nil {
+		return nil, errors.New("failed to encode public key")
+	}
+
+	account := &models.Account{
+		AccountID: accountID,
+		Email:     email,
+		Name:      name,
+		Password:  string(hashedPassword),
+		Balance:   0,
+		Nonce:     0,
+		PublicKey: publicKeyBytes,
+	}
+
+	if err := s.db.Create(account).Error; err != nil {
+		return nil, err
+	}
+
+	// Return account without password field for security
+	account.Password = ""
+	return account, nil
+}
+
+// LoginAccount authenticates a user with email and password
+func (s *AccountService) LoginAccount(email, password string) (*models.Account, error) {
+	var account models.Account
+	if err := s.db.First(&account, "email = ?", email).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("invalid email or password")
+		}
+		return nil, err
+	}
+
+	// Verify password
+	if err := bcrypt.CompareHashAndPassword([]byte(account.Password), []byte(password)); err != nil {
+		return nil, errors.New("invalid email or password")
+	}
+
+	// Return account without password
+	account.Password = ""
+	return &account, nil
+}
+
+// GetAccountByEmail retrieves an account by email
+func (s *AccountService) GetAccountByEmail(email string) (*models.Account, error) {
+	var account models.Account
+	if err := s.db.First(&account, "email = ?", email).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("account not found")
+		}
+		return nil, err
+	}
+	account.Password = ""
+	return &account, nil
+}
+
+// generateAccountID creates a unique account ID
+func generateAccountID() (string, error) {
+	b := make([]byte, 8)
+	_, err := rand.Read(b)
+	if err != nil {
+		return "", err
+	}
+	return "verity_" + hex.EncodeToString(b), nil
+}
+
+// generatePublicKey creates an ECDSA public key for the account
+func generatePublicKey() (string, error) {
+	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return "", err
+	}
+
+	// Encode public key as hex
+	pubKeyBytes := elliptic.Marshal(elliptic.P256(), privateKey.PublicKey.X, privateKey.PublicKey.Y)
+	return hex.EncodeToString(pubKeyBytes), nil
 }

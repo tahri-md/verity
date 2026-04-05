@@ -34,16 +34,13 @@ func RegisterTransactionRoutes(r *gin.Engine, db *gorm.DB) {
 	api.GET("/:id/proof", func(c *gin.Context) {
 		id := c.Param("id")
 
-		proof, root, err := transactionService.GetTransactionProof(id)
+		proof, err := transactionService.GetTransactionProof(id)
 		if err != nil {
 			c.JSON(404, gin.H{"error": err.Error()})
 			return
 		}
 
-		c.JSON(200, gin.H{
-			"proof":       proof,
-			"merkle_root": root,
-		})
+		c.JSON(200, proof)
 	})
 	r.POST("/api/v1/verify/transaction", func(c *gin.Context) {
 

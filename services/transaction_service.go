@@ -62,7 +62,12 @@ func (s *TransactionService) GetTransactionProof(txnID string) (*models.MerklePr
 
 	root := crypto.BuildMerkleRoot(hashes)
 
-	return proof, root, nil
+	return &models.MerkleProof{
+		TransactionID: transaction.TxnID,
+		BlockNumber:   uint64(transaction.BlockNumber),
+		Hashes:        proof,
+		MerkleRoot:    root,
+	}, nil
 
 }
 
