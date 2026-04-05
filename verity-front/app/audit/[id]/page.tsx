@@ -1,19 +1,21 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import PrivateLayout from '@/components/PrivateLayout'
-import axios from 'axios'
+import { api } from '@/lib/api'
 
 interface AuditEvent {
-  id: string
-  eventType: string
-  accountId: string
-  description: string
+  event_id: string
+  event_type: string
+  action: string
+  account_id: string
+  details: string
   timestamp: string
-  status: string
-  details?: any
+  entity_type: string
+  entity_id: string
+  event_hash: string
 }
 
 export default function AuditDetailsPage() {
@@ -22,23 +24,20 @@ export default function AuditDetailsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  useEffect(() => {
-    fetchEvent()
-  }, [params.id])
-
-  const fetchEvent = async () => {
+  const fetchEvent = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token')
-      const response = await axios.get(`http://localhost:8080/api/audit/${params.id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
+      const response = await api.get(`/audit/events/${params.id}`)
       setEvent(response.data)
     } catch (err: any) {
       setError('Failed to load audit event')
     } finally {
       setLoading(false)
     }
-  }
+  }, [params.id])
+
+  useEffect(() => {
+    fetchEvent()
+  }, [fetchEvent])
 
   if (loading) {
     return (
@@ -76,31 +75,27 @@ export default function AuditDetailsPage() {
           <div className="flex justify-between items-start mb-6">
             <div>
               <h1 className="text-3xl font-bold text-primary">Audit Event</h1>
-              <p className="text-muted text-sm mt-1">{event.id}</p>
+              <p className="text-muted text-sm mt-1">{event.event_id}</p>
             </div>
-            <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-              event.status === 'success'
-                ? 'bg-green-500/10 text-green-500'
-                : 'bg-primary/10 text-primary'
-            }`}>
-              {event.status}
+            <span className="px-3 py-1 rounded-full text-sm font-medium bg-muted/20">
+              {event.action}
             </span>
           </div>
 
           <div className="space-y-6">
             <div className="border-b border-border pb-6">
               <p className="text-muted text-sm mb-2">Event Type</p>
-              <p className="text-lg font-bold text-primary">{event.eventType}</p>
+              <p className="text-lg font-bold text-primary">{event.event_type}</p>
             </div>
 
             <div className="border-b border-border pb-6">
-              <p className="text-muted text-sm mb-2">Description</p>
-              <p className="text-foreground">{event.description}</p>
+              <p className="text-muted text-sm mb-2">Details</p>
+              <p className="text-foreground">{event.details}</p>
             </div>
 
             <div className="border-b border-border pb-6">
               <p className="text-muted text-sm mb-2">Account ID</p>
-              <p className="text-sm font-mono text-accent break-all">{event.accountId}</p>
+              <p className="text-sm font-mono text-accent break-all">{event.account_id}</p>
             </div>
 
             <div>
@@ -108,14 +103,16 @@ export default function AuditDetailsPage() {
               <p>{new Date(event.timestamp).toLocaleString()}</p>
             </div>
 
-            {event.details && (
-              <div className="border-t border-border pt-6">
-                <p className="text-muted text-sm mb-3">Additional Details</p>
-                <pre className="bg-muted/10 p-4 rounded text-xs overflow-auto">
-                  {JSON.stringify(event.details, null, 2)}
-                </pre>
+            <div className="border-t border-border pt-6 space-y-3">
+              <div>
+                <p className="text-muted text-sm mb-2">Entity</p>
+                <p className="text-sm">{event.entity_type} / {event.entity_id || 'N/A'}</p>
               </div>
-            )}
+              <div>
+                <p className="text-muted text-sm mb-2">Event Hash</p>
+                <p className="font-mono text-xs text-accent break-all bg-muted/10 p-3 rounded">{event.event_hash}</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>

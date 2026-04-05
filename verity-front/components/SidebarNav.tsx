@@ -3,16 +3,16 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Send, Boxes, Users, ClipboardList, Scale, Database, Menu, X } from 'lucide-react'
+import { LayoutDashboard, Send, Boxes, ClipboardList, Scale, Database, Menu, X, Settings } from 'lucide-react'
 
 const navItems = [
   { label: 'Dashboard',    href: '/dashboard',    icon: LayoutDashboard },
   { label: 'Transactions', href: '/transactions', icon: Send },
   { label: 'Blocks',       href: '/blocks',       icon: Boxes },
-  { label: 'Accounts',     href: '/accounts',     icon: Users },
   { label: 'Audit',        href: '/audit',        icon: ClipboardList },
   { label: 'Consensus',    href: '/consensus',    icon: Scale },
   { label: 'Ledger',       href: '/ledger',       icon: Database },
+  { label: 'Settings',     href: '/settings',     icon: Settings }
 ]
 
 export default function SidebarNav() {

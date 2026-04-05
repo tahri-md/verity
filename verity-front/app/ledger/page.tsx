@@ -3,18 +3,18 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import PrivateLayout from '@/components/PrivateLayout'
-import axios from 'axios'
+import { api } from '@/lib/api'
 
-interface LedgerStats {
-  totalAccounts: number
-  totalTransactions: number
-  totalBlocks: number
-  totalBalance: number
-  stateHash: string
+interface LedgerState {
+  state_hash: string
+  block_number: number
+  root_hash: string
+  timestamp: string
+  is_valid: boolean
 }
 
 export default function LedgerPage() {
-  const [stats, setStats] = useState<LedgerStats | null>(null)
+  const [state, setState] = useState<LedgerState | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -24,17 +24,8 @@ export default function LedgerPage() {
 
   const fetchLedgerState = async () => {
     try {
-      const response = await axios.get('http://localhost:8080/api/v1/ledger/states')
-      const dataList = response.data?.data || []
-      const latestData = dataList[0] || response.data
-      const stats = {
-        totalAccounts: latestData.total_accounts || 0,
-        totalTransactions: latestData.total_transactions || 0,
-        totalBlocks: latestData.total_blocks || 0,
-        totalBalance: latestData.total_balance || 0,
-        stateHash: latestData.state_hash || 'N/A',
-      }
-      setStats(stats)
+      const response = await api.get('/api/v1/ledger/latest')
+      setState(response.data)
     } catch (err: any) {
       setError('Failed to load ledger state')
     } finally {
@@ -71,38 +62,38 @@ export default function LedgerPage() {
           </div>
         )}
 
-        {stats && (
+        {state && (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
               <div className="card">
-                <p className="text-muted text-sm">Total Accounts</p>
-                <p className="text-3xl font-bold text-primary mt-2">{stats.totalAccounts}</p>
+                <p className="text-muted text-sm">Block Number</p>
+                <p className="text-3xl font-bold text-primary mt-2">{state.block_number}</p>
               </div>
 
               <div className="card">
-                <p className="text-muted text-sm">Total Transactions</p>
-                <p className="text-3xl font-bold text-primary mt-2">{stats.totalTransactions}</p>
+                <p className="text-muted text-sm">Validity</p>
+                <p className="text-3xl font-bold text-primary mt-2">{state.is_valid ? 'Valid' : 'Invalid'}</p>
               </div>
 
               <div className="card">
-                <p className="text-muted text-sm">Total Blocks</p>
-                <p className="text-3xl font-bold text-primary mt-2">{stats.totalBlocks}</p>
+                <p className="text-muted text-sm">Root Hash</p>
+                <p className="text-sm font-mono text-accent break-all mt-2">{state.root_hash || 'N/A'}</p>
               </div>
 
               <div className="card">
-                <p className="text-muted text-sm">Total Balance</p>
-                <p className="text-3xl font-bold text-primary mt-2">${stats.totalBalance.toFixed(2)}</p>
+                <p className="text-muted text-sm">Timestamp</p>
+                <p className="text-sm mt-2">{new Date(state.timestamp).toLocaleString()}</p>
               </div>
             </div>
 
             <div className="card">
               <h2 className="text-xl font-bold text-primary mb-4">State Hash</h2>
               <p className="font-mono text-xs text-accent break-all bg-muted/10 p-4 rounded">
-                {stats.stateHash}
+                {state.state_hash}
               </p>
-              <button className="btn btn-secondary w-full mt-4">
-                Verify State Hash
-              </button>
+              <Link href={`/ledger/verify?state_hash=${encodeURIComponent(state.state_hash)}`} className="btn btn-secondary w-full mt-4 text-center">
+                Verify This State
+              </Link>
             </div>
           </>
         )}

@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import PrivateLayout from '@/components/PrivateLayout'
-import axios from 'axios'
+import { api } from '@/lib/api'
 
 export default function MerkleVerifyPage() {
   const [formData, setFormData] = useState({
@@ -29,16 +29,12 @@ export default function MerkleVerifyPage() {
     setLoading(true)
 
     try {
-      const token = localStorage.getItem('token')
-      const response = await axios.post(
-        'http://localhost:8080/api/crypto/verify-merkle',
-        {
-          transactionHash: formData.transactionHash,
-          merkleRoot: formData.merkleRoot,
-          proofPath: JSON.parse(formData.proofPath),
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
-      )
+      const proof = JSON.parse(formData.proofPath)
+      const response = await api.post('/api/crypto/verify-merkle', {
+        transactionHash: formData.transactionHash,
+        merkleRoot: formData.merkleRoot,
+        proof,
+      })
       setResult(response.data)
     } catch (err: any) {
       setError(err.response?.data?.message || 'Verification failed')
@@ -98,7 +94,7 @@ export default function MerkleVerifyPage() {
                   value={formData.proofPath}
                   onChange={handleChange}
                   className="input-field w-full font-mono text-xs"
-                  placeholder='["0x...", "0x..."]'
+                  placeholder='[{"hash":"...","position":"left"}]'
                   rows={4}
                   required
                 />

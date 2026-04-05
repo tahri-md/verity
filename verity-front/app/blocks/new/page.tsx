@@ -4,20 +4,52 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import PrivateLayout from '@/components/PrivateLayout'
-import axios from 'axios'
+import { api } from '@/lib/api'
 
 interface Transaction {
-  id: string
+  txn_id: string
   hash: string
-  from: string
-  to: string
+  from_account: string
+  to_account: string
   amount: number
+  status?: string
+  timestamp?: number
+  nonce?: number
+  signature?: string
+  public_key?: string
+  block_number?: number
+}
+
+async function sha256Hex(input: string): Promise<string> {
+  const data = new TextEncoder().encode(input)
+  const hash = await crypto.subtle.digest('SHA-256', data)
+  return Array.from(new Uint8Array(hash))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+}
+
+async function buildMerkleRoot(hashes: string[]): Promise<string> {
+  if (hashes.length === 0) return ''
+  let level = [...hashes]
+  while (level.length > 1) {
+    const next: string[] = []
+    for (let i = 0; i < level.length; i += 2) {
+      const left = level[i]
+      const right = i + 1 < level.length ? level[i + 1] : level[i]
+      next.push(await sha256Hex(left + right))
+    }
+    level = next
+  }
+  return level[0]
 }
 
 export default function CreateBlockPage() {
   const router = useRouter()
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [selectedTransactions, setSelectedTransactions] = useState<string[]>([])
+  const [blockNumber, setBlockNumber] = useState('')
+  const [parentHash, setParentHash] = useState('')
+  const [producer, setProducer] = useState('')
   const [loading, setLoading] = useState(false)
   const [fetchingTx, setFetchingTx] = useState(true)
   const [error, setError] = useState('')
@@ -28,11 +60,12 @@ export default function CreateBlockPage() {
 
   const fetchPendingTransactions = async () => {
     try {
-      const token = localStorage.getItem('token')
-      const response = await axios.get('http://localhost:8080/api/transactions?status=pending', {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      setTransactions(response.data.data || [])
+      const response = await api.get('/api/v1/transactions')
+      const all = Array.isArray(response.data) ? response.data : []
+
+      // Backend does not provide a dedicated "pending" endpoint; treat empty status as pending.
+      const pending = all.filter((t: any) => (t.status || 'pending').toLowerCase() !== 'confirmed')
+      setTransactions(pending)
     } catch (err) {
       setError('Failed to load transactions')
     } finally {
@@ -58,18 +91,40 @@ export default function CreateBlockPage() {
     setLoading(true)
 
     try {
-      const token = localStorage.getItem('token')
-      await axios.post(
-        'http://localhost:8080/api/blocks',
-        {
-          transactionIds: selectedTransactions,
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
-      )
+      const bn = Number(blockNumber)
+      if (!Number.isFinite(bn) || bn <= 0) {
+        setError('Enter a valid block number')
+        return
+      }
+
+      const selected = transactions.filter((t) => selectedTransactions.includes(t.txn_id))
+      const normalizedTxs: any[] = []
+      for (const tx of selected) {
+        const hash = tx.hash || (await sha256Hex(`${tx.from_account}${tx.to_account}${tx.amount}`))
+        normalizedTxs.push({
+          ...tx,
+          hash,
+          status: tx.status || 'pending',
+        })
+      }
+
+      const hashes = normalizedTxs.map((t) => t.hash)
+      const merkleRoot = await buildMerkleRoot(hashes)
+      const blockHash = await sha256Hex(`${parentHash}${merkleRoot}`)
+
+      await api.post('/blocks', {
+        block_number: bn,
+        parent_hash: parentHash,
+        block_hash: blockHash,
+        producer: producer,
+        merkle_root: merkleRoot,
+        finality: 'tentative',
+        transactions: normalizedTxs,
+      })
 
       router.push('/blocks')
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to create block')
+      setError(err.response?.data?.error || 'Failed to create block')
     } finally {
       setLoading(false)
     }
@@ -98,6 +153,41 @@ export default function CreateBlockPage() {
             </div>
           ) : (
             <form onSubmit={handleCreateBlock} className="space-y-6">
+              <div className="grid grid-cols-1 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">Block Number</label>
+                  <input
+                    type="number"
+                    value={blockNumber}
+                    onChange={(e) => setBlockNumber(e.target.value)}
+                    className="w-full p-3 rounded-lg bg-muted/10 border border-border focus:border-primary focus:outline-none"
+                    placeholder="e.g. 1"
+                    min={1}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">Parent Hash</label>
+                  <input
+                    type="text"
+                    value={parentHash}
+                    onChange={(e) => setParentHash(e.target.value)}
+                    className="w-full p-3 rounded-lg bg-muted/10 border border-border focus:border-primary focus:outline-none font-mono text-sm"
+                    placeholder="(optional)"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">Producer</label>
+                  <input
+                    type="text"
+                    value={producer}
+                    onChange={(e) => setProducer(e.target.value)}
+                    className="w-full p-3 rounded-lg bg-muted/10 border border-border focus:border-primary focus:outline-none"
+                    placeholder="validator id / node name"
+                  />
+                </div>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium mb-4">
                   Pending Transactions ({selectedTransactions.length} selected)
@@ -107,19 +197,21 @@ export default function CreateBlockPage() {
                   <div className="space-y-3 max-h-64 overflow-y-auto border border-border rounded-lg p-4">
                     {transactions.map((tx) => (
                       <label
-                        key={tx.id}
+                        key={tx.txn_id}
                         className="flex items-start gap-3 p-3 hover:bg-muted/10 rounded-lg cursor-pointer"
                       >
                         <input
                           type="checkbox"
-                          checked={selectedTransactions.includes(tx.id)}
-                          onChange={() => handleSelectTransaction(tx.id)}
+                          checked={selectedTransactions.includes(tx.txn_id)}
+                          onChange={() => handleSelectTransaction(tx.txn_id)}
                           className="mt-1 w-4 h-4"
                         />
                         <div className="flex-1 min-w-0">
-                          <p className="font-mono text-sm text-accent break-all">{tx.hash.substring(0, 32)}...</p>
+                          <p className="font-mono text-sm text-accent break-all">
+                            {tx.hash ? `${tx.hash.substring(0, 32)}...` : '(no hash)'}
+                          </p>
                           <p className="text-xs text-muted mt-1">
-                            {tx.from.substring(0, 16)}... → {tx.to.substring(0, 16)}... | ${tx.amount.toFixed(2)}
+                            {tx.from_account?.substring(0, 16)}... → {tx.to_account?.substring(0, 16)}... | {tx.amount}
                           </p>
                         </div>
                       </label>

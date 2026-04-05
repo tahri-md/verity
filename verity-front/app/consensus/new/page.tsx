@@ -4,14 +4,15 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import PrivateLayout from '@/components/PrivateLayout'
-import axios from 'axios'
+import { api } from '@/lib/api'
 
 export default function CreateConsensusPage() {
   const router = useRouter()
   const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    options: ['Yes', 'No'],
+    block_number: '',
+    view_number: '0',
+    network_health: 'healthy',
+    leader: '',
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -29,20 +30,23 @@ export default function CreateConsensusPage() {
     setLoading(true)
 
     try {
-      const token = localStorage.getItem('token')
-      await axios.post(
-        'http://localhost:8080/api/consensus',
-        {
-          title: formData.title,
-          description: formData.description,
-          options: formData.options,
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
-      )
+      const bn = Number(formData.block_number)
+      const vn = Number(formData.view_number)
+      if (!Number.isFinite(bn) || bn <= 0) {
+        setError('Enter a valid block number')
+        return
+      }
+
+      await api.post('/consensus', {
+        block_number: bn,
+        view_number: Number.isFinite(vn) ? vn : 0,
+        network_health: formData.network_health,
+        leader: formData.leader,
+      })
 
       router.push('/consensus')
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to create proposal')
+      setError(err.response?.data?.error || 'Failed to create consensus state')
     } finally {
       setLoading(false)
     }
@@ -56,8 +60,8 @@ export default function CreateConsensusPage() {
         </Link>
 
         <div className="card border-2">
-          <h1 className="text-3xl font-bold text-primary mb-2">Create New Proposal</h1>
-          <p className="text-muted mb-8">Submit a proposal for consensus voting</p>
+          <h1 className="text-3xl font-bold text-primary mb-2">Create Consensus State</h1>
+          <p className="text-muted mb-8">Initialize consensus tracking for a block</p>
 
           {error && (
             <div className="bg-destructive/10 border border-destructive text-destructive px-4 py-3 rounded-lg mb-6">
@@ -67,28 +71,51 @@ export default function CreateConsensusPage() {
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label className="block text-sm font-medium mb-2">Proposal Title</label>
+              <label className="block text-sm font-medium mb-2">Block Number</label>
               <input
-                type="text"
-                name="title"
-                value={formData.title}
+                type="number"
+                name="block_number"
+                value={formData.block_number}
                 onChange={handleChange}
                 className="input-field w-full"
-                placeholder="E.g., Increase block size limit"
+                placeholder="e.g. 1"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-2">Description</label>
-              <textarea
-                name="description"
-                value={formData.description}
+              <label className="block text-sm font-medium mb-2">View Number</label>
+              <input
+                type="number"
+                name="view_number"
+                value={formData.view_number}
                 onChange={handleChange}
                 className="input-field w-full"
-                placeholder="Provide details about your proposal..."
-                rows={4}
-                required
+                placeholder="0"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">Network Health</label>
+              <input
+                type="text"
+                name="network_health"
+                value={formData.network_health}
+                onChange={handleChange}
+                className="input-field w-full"
+                placeholder="healthy | degraded | partitioned"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">Leader (optional)</label>
+              <input
+                type="text"
+                name="leader"
+                value={formData.leader}
+                onChange={handleChange}
+                className="input-field w-full"
+                placeholder="validator_1"
               />
             </div>
 
@@ -98,7 +125,7 @@ export default function CreateConsensusPage() {
                 disabled={loading}
                 className="btn btn-primary flex-1"
               >
-                {loading ? 'Creating...' : 'Create Proposal'}
+                {loading ? 'Creating...' : 'Create State'}
               </button>
               <Link href="/consensus" className="btn btn-secondary flex-1 text-center">
                 Cancel

@@ -3,17 +3,19 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import PrivateLayout from '@/components/PrivateLayout'
-import axios from 'axios'
+import { api } from '@/lib/api'
 
 interface Transaction {
-  id?: string
-  from_account?: string
-  from?: string
-  to_account?: string
-  to?: string
+  txn_id: string
+  from_account: string
+  to_account: string
   amount: number
   status?: string
-  timestamp: number | string
+  timestamp: number
+}
+
+function toDate(ts: number): Date {
+  return new Date(ts < 1e12 ? ts * 1000 : ts)
 }
 
 export default function TransactionsPage() {
@@ -29,7 +31,7 @@ export default function TransactionsPage() {
   const fetchTransactions = async () => {
     try {
       setLoading(true)
-      const response = await axios.get('http://localhost:8080/api/v1/transactions')
+      const response = await api.get('/api/v1/transactions')
       const allTransactions = Array.isArray(response.data) ? response.data : []
       setTransactions(allTransactions)
     } catch (err: any) {
@@ -108,15 +110,15 @@ export default function TransactionsPage() {
               </thead>
               <tbody>
                 {filteredTransactions.map((tx) => (
-                  <tr key={tx.id || Math.random()}>
+                  <tr key={tx.txn_id}>
                     <td>
                       <code className="hash-badge">
-                        {tx.from_account?.substring(0, 10) || tx.from?.substring(0, 8)}...
+                        {tx.from_account?.substring(0, 10)}...
                       </code>
                     </td>
                     <td>
                       <code className="hash-badge">
-                        {tx.to_account?.substring(0, 10) || tx.to?.substring(0, 8)}...
+                        {tx.to_account?.substring(0, 10)}...
                       </code>
                     </td>
                     <td className="text-right font-semibold text-sm">{tx.amount}</td>
@@ -130,10 +132,10 @@ export default function TransactionsPage() {
                       </span>
                     </td>
                     <td className="text-sm text-foreground/60">
-                      {new Date(tx.timestamp || Date.now()).toLocaleDateString()}
+                      {toDate(tx.timestamp).toLocaleDateString()}
                     </td>
                     <td className="text-right">
-                      <Link href={`/transactions/${tx.id}`} className="text-primary hover:text-primary/80 font-medium text-sm">
+                      <Link href={`/transactions/${tx.txn_id}`} className="text-primary hover:text-primary/80 font-medium text-sm">
                         View
                       </Link>
                     </td>

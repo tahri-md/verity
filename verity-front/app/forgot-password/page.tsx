@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import axios from 'axios'
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('')
@@ -16,10 +15,9 @@ export default function ForgotPasswordPage() {
     setLoading(true)
 
     try {
-      await axios.post('http://localhost:8080/api/auth/forgot-password', {
-        email,
-      })
-      setSubmitted(true)
+      // The backend currently does not implement password reset.
+      // Keep the page, but avoid hitting a non-existent API endpoint.
+      setError('Password reset is not implemented on the backend yet.')
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to send reset link')
     } finally {

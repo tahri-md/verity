@@ -1,18 +1,19 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import PrivateLayout from '@/components/PrivateLayout'
-import axios from 'axios'
+import { api } from '@/lib/api'
 
 interface Block {
-  id: string
-  number: number
-  merkleRoot: string
-  hash: string
+  block_number: number
+  block_hash: string
+  parent_hash: string
+  merkle_root: string
   timestamp: string
   transactions: any[]
+  finality?: string
 }
 
 export default function BlockDetailsPage() {
@@ -20,22 +21,32 @@ export default function BlockDetailsPage() {
   const [block, setBlock] = useState<Block | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [validation, setValidation] = useState<{ is_valid: boolean; error?: string } | null>(null)
 
-  useEffect(() => {
-    fetchBlock()
-  }, [params.id])
-
-  const fetchBlock = async () => {
+  const fetchBlock = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token')
-      const response = await axios.get(`http://localhost:8080/api/blocks/${params.id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
+      const response = await api.get(`/blocks/${params.id}`)
       setBlock(response.data)
     } catch (err: any) {
       setError('Failed to load block')
     } finally {
       setLoading(false)
+    }
+  }, [params.id])
+
+  useEffect(() => {
+    fetchBlock()
+  }, [fetchBlock])
+
+  const validateBlock = async () => {
+    if (!block) return
+    try {
+      setValidation(null)
+      const res = await api.post(`/blocks/${block.block_number}/validate`)
+      setValidation({ is_valid: Boolean(res.data?.is_valid) })
+    } catch (err: any) {
+      const serverErr = err?.response?.data?.error
+      setValidation({ is_valid: false, error: serverErr ? String(serverErr) : 'Validation failed' })
     }
   }
 
@@ -74,17 +85,17 @@ export default function BlockDetailsPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2">
             <div className="card border-2 mb-6">
-              <h1 className="text-3xl font-bold text-primary mb-6">Block #{block.number}</h1>
+              <h1 className="text-3xl font-bold text-primary mb-6">Block #{block.block_number}</h1>
 
               <div className="space-y-6">
                 <div className="border-b border-border pb-6">
                   <p className="text-muted text-sm mb-2">Block Hash</p>
-                  <p className="font-mono text-xs text-accent break-all">{block.hash}</p>
+                  <p className="font-mono text-xs text-accent break-all">{block.block_hash}</p>
                 </div>
 
                 <div className="border-b border-border pb-6">
                   <p className="text-muted text-sm mb-2">Merkle Root</p>
-                  <p className="font-mono text-xs text-accent break-all">{block.merkleRoot}</p>
+                  <p className="font-mono text-xs text-accent break-all">{block.merkle_root}</p>
                 </div>
 
                 <div>
@@ -100,17 +111,17 @@ export default function BlockDetailsPage() {
                 <div className="space-y-3">
                   {block.transactions.map((tx: any) => (
                     <Link
-                      key={tx.id}
-                      href={`/transactions/${tx.id}`}
+                      key={tx.txn_id}
+                      href={`/transactions/${tx.txn_id}`}
                       className="flex justify-between items-center p-3 hover:bg-muted/10 border border-border rounded-lg transition-colors"
                     >
                       <div>
-                        <p className="font-medium font-mono text-sm">{tx.from.substring(0, 16)}...</p>
-                        <p className="text-xs text-muted">{new Date(tx.timestamp).toLocaleString()}</p>
+                        <p className="font-medium font-mono text-sm">{tx.from_account?.substring(0, 16)}...</p>
+                        <p className="text-xs text-muted">{new Date((tx.timestamp ?? Date.now()) < 1e12 ? tx.timestamp * 1000 : tx.timestamp).toLocaleString()}</p>
                       </div>
                       <div className="text-right">
-                        <p className="font-medium">${tx.amount.toFixed(2)}</p>
-                        <p className="text-xs text-green-500">confirmed</p>
+                        <p className="font-medium">{tx.amount}</p>
+                        <p className="text-xs text-green-500">{tx.status || 'confirmed'}</p>
                       </div>
                     </Link>
                   ))}
@@ -127,15 +138,28 @@ export default function BlockDetailsPage() {
               <div className="space-y-4">
                 <div className="flex justify-between">
                   <span className="text-muted">Block Number</span>
-                  <span className="font-bold">{block.number}</span>
+                  <span className="font-bold">{block.block_number}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted">Transactions</span>
                   <span className="font-bold">{block.transactions.length}</span>
                 </div>
-                <button className="btn btn-primary w-full mt-6">
-                  Verify Merkle Root
+                <button onClick={validateBlock} className="btn btn-primary w-full mt-6">
+                  Validate Block
                 </button>
+
+                {validation && (
+                  <div className={`p-3 rounded-lg text-center mt-4 ${
+                    validation.is_valid
+                      ? 'bg-green-500/10 text-green-500 border border-green-500'
+                      : 'bg-destructive/10 text-destructive border border-destructive'
+                  }`}>
+                    <p className="font-medium">
+                      {validation.is_valid ? 'Block is valid' : 'Block is invalid'}
+                    </p>
+                    {validation.error && <p className="text-xs mt-2">{validation.error}</p>}
+                  </div>
+                )}
               </div>
             </div>
           </div>

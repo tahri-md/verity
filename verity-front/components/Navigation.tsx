@@ -18,7 +18,6 @@ export default function Navigation() {
 
   const navItems = [
     { href: '/dashboard', label: 'Dashboard' },
-    { href: '/accounts', label: 'Accounts' },
     { href: '/transactions', label: 'Transactions' },
     { href: '/blocks', label: 'Blocks' },
     { href: '/consensus', label: 'Consensus' },
@@ -97,9 +96,6 @@ export default function Navigation() {
                 <div className="absolute right-0 mt-2 w-48 bg-card border border-border rounded-lg shadow-lg py-2 z-50">
                   <Link href="/profile" className="block px-4 py-2 hover:bg-muted/20 text-sm">
                     Profile
-                  </Link>
-                  <Link href="/settings" className="block px-4 py-2 hover:bg-muted/20 text-sm">
-                    Settings
                   </Link>
                   <button
                     onClick={handleLogout}

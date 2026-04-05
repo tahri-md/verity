@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import PrivateLayout from '@/components/PrivateLayout'
-import axios from 'axios'
+import { api } from '@/lib/api'
 
 interface DashboardData {
   totalBalance: number
@@ -12,6 +12,15 @@ interface DashboardData {
   accountStatus: string
   recentTransactions: any[]
   recentBlocks: any[]
+}
+
+function toDate(input: unknown): Date {
+  const n = typeof input === 'number' ? input : Date.parse(String(input))
+  if (Number.isFinite(n)) {
+    // Heuristic: treat small numbers as seconds.
+    return new Date(n < 1e12 ? n * 1000 : n)
+  }
+  return new Date()
 }
 
 export default function Dashboard() {
@@ -26,11 +35,11 @@ export default function Dashboard() {
         const accountInfo = accountData ? JSON.parse(accountData) : null
         
         // Fetch transactions count
-        const txResponse = await axios.get('http://localhost:8080/api/v1/transactions')
+        const txResponse = await api.get('/api/v1/transactions')
         const transactions = Array.isArray(txResponse.data) ? txResponse.data : []
         
         // Fetch blocks
-        const blocksResponse = await axios.get('http://localhost:8080/blocks')
+        const blocksResponse = await api.get('/blocks')
         const blocks = Array.isArray(blocksResponse.data) ? blocksResponse.data : []
         
         setData({
@@ -111,9 +120,6 @@ export default function Dashboard() {
                 <Link href="/transactions/new" className="btn btn-primary">
                   Create Transaction
                 </Link>
-                <Link href="/accounts/new" className="btn btn-secondary">
-                  New Account
-                </Link>
                 <Link href="/blocks/new" className="btn btn-ghost">
                   Create Block
                 </Link>
@@ -133,8 +139,8 @@ export default function Dashboard() {
                     {data.recentTransactions && data.recentTransactions.length > 0 ? (
                       data.recentTransactions.map((tx: any) => (
                         <Link
-                          key={tx.id}
-                          href={`/transactions/${tx.id}`}
+                          key={tx.txn_id}
+                          href={`/transactions/${tx.txn_id}`}
                           className="flex items-center justify-between p-3 rounded-md hover:bg-muted/40 transition-colors"
                         >
                           <div className="flex-1 min-w-0">
@@ -143,7 +149,7 @@ export default function Dashboard() {
                               <span className="text-foreground/40">→</span>
                               <code className="hash-badge">{tx.to_account?.substring(0, 8) || 'unknown'}...</code>
                             </div>
-                            <p className="text-xs text-foreground/50 mt-1">{new Date(tx.timestamp).toLocaleDateString()}</p>
+                            <p className="text-xs text-foreground/50 mt-1">{toDate(tx.timestamp).toLocaleDateString()}</p>
                           </div>
                           <div className="text-right">
                             <p className="text-sm font-semibold">{tx.amount}</p>
@@ -169,19 +175,19 @@ export default function Dashboard() {
                     {data.recentBlocks && data.recentBlocks.length > 0 ? (
                       data.recentBlocks.map((block: any) => (
                         <Link
-                          key={block.id}
-                          href={`/blocks/${block.id}`}
+                          key={block.block_number}
+                          href={`/blocks/${block.block_number}`}
                           className="flex items-center justify-between p-3 rounded-md hover:bg-muted/40 transition-colors"
                         >
                           <div className="flex-1">
                             <div className="flex items-center gap-2 font-semibold text-sm">
-                              <span>Block #{block.number || 'N/A'}</span>
+                              <span>Block #{block.block_number ?? 'N/A'}</span>
                             </div>
-                            <p className="text-xs text-foreground/50 mt-1">{new Date(block.timestamp).toLocaleDateString()}</p>
+                            <p className="text-xs text-foreground/50 mt-1">{toDate(block.timestamp).toLocaleDateString()}</p>
                           </div>
                           <div className="text-right">
-                            <code className="hash-badge text-xs">{block.hash?.substring(0, 8) || 'N/A'}...</code>
-                            <p className="text-xs text-foreground/50 mt-1">{block.txCount || 0} txns</p>
+                            <code className="hash-badge text-xs">{block.block_hash?.substring(0, 8) || 'N/A'}...</code>
+                            <p className="text-xs text-foreground/50 mt-1">{block.transactions?.length || 0} txns</p>
                           </div>
                         </Link>
                       ))

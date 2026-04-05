@@ -1,22 +1,35 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import PrivateLayout from '@/components/PrivateLayout'
-import axios from 'axios'
+import { api } from '@/lib/api'
 
 interface Transaction {
-  id: string
-  from: string
-  to: string
+  txn_id: string
+  from_account: string
+  to_account: string
   amount: number
   status: string
   hash: string
   signature: string
-  blockNumber?: number
-  timestamp: string
-  message?: string
+  public_key: string
+  block_number?: number
+  nonce: number
+  timestamp: number
+}
+
+interface MerkleProofResponse {
+  transaction_id: string
+  block_number: number
+  hashes: string[]
+  positions: string[]
+  merkle_root: string
+}
+
+function toDate(ts: number): Date {
+  return new Date(ts < 1e12 ? ts * 1000 : ts)
 }
 
 export default function TransactionDetailsPage() {
@@ -24,41 +37,53 @@ export default function TransactionDetailsPage() {
   const [transaction, setTransaction] = useState<Transaction | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [verified, setVerified] = useState<Boolean | null>(null)
+  const [verified, setVerified] = useState<boolean | null>(null)
+  const [verifyError, setVerifyError] = useState('')
 
-  useEffect(() => {
-    fetchTransaction()
-  }, [params.id])
-
-  const fetchTransaction = async () => {
+  const fetchTransaction = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token')
-      const response = await axios.get(`http://localhost:8080/api/transactions/${params.id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
+      const response = await api.get(`/api/v1/transactions/${params.id}`)
       setTransaction(response.data)
     } catch (err: any) {
       setError('Failed to load transaction')
     } finally {
       setLoading(false)
     }
-  }
+  }, [params.id])
 
-  const verifySignature = async () => {
+  useEffect(() => {
+    fetchTransaction()
+  }, [fetchTransaction])
+
+  const verifyTransaction = async () => {
     if (!transaction) return
 
     try {
-      const token = localStorage.getItem('token')
-      const response = await axios.post(
-        'http://localhost:8080/api/crypto/verify-signature',
-        {
-          signature: transaction.signature,
-          transaction: transaction,
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
-      )
-      setVerified(response.data.valid)
-    } catch (err) {
+      setVerifyError('')
+
+      const proofRes = await api.get<MerkleProofResponse>(`/api/v1/transactions/${transaction.txn_id}/proof`)
+      const proof = proofRes.data
+
+      if (!Array.isArray(proof.hashes) || !Array.isArray(proof.positions) || proof.hashes.length !== proof.positions.length) {
+        setVerifyError('Invalid proof format from server')
+        setVerified(false)
+        return
+      }
+
+      const proofNodes = proof.hashes.map((hash, i) => ({
+        hash,
+        position: proof.positions[i],
+      }))
+
+      const verifyRes = await api.post('/api/v1/verify/transaction', {
+        transaction,
+        proof: proofNodes,
+      })
+
+      setVerified(Boolean(verifyRes.data?.valid))
+    } catch (err: any) {
+      const serverErr = err?.response?.data?.error
+      if (serverErr) setVerifyError(String(serverErr))
       setVerified(false)
     }
   }
@@ -101,7 +126,7 @@ export default function TransactionDetailsPage() {
               <div className="flex justify-between items-start mb-6">
                 <div>
                   <h1 className="text-3xl font-bold text-primary">Transaction Details</h1>
-                  <p className="text-muted text-sm mt-1">{transaction.id}</p>
+                  <p className="text-muted text-sm mt-1">{transaction.txn_id}</p>
                 </div>
                 <span className={`px-3 py-1 rounded-full text-sm font-medium ${
                   transaction.status === 'confirmed' ? 'bg-green-500/10 text-green-500' :
@@ -117,12 +142,12 @@ export default function TransactionDetailsPage() {
                   <p className="text-muted text-sm mb-2">Transfer</p>
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="font-mono text-sm text-accent">{transaction.from}</p>
+                      <p className="font-mono text-sm text-accent">{transaction.from_account}</p>
                       <p className="text-xs text-muted mt-1">From</p>
                     </div>
                     <span className="text-2xl font-bold text-primary">→</span>
                     <div className="text-right">
-                      <p className="font-mono text-sm text-accent">{transaction.to}</p>
+                      <p className="font-mono text-sm text-accent">{transaction.to_account}</p>
                       <p className="text-xs text-muted mt-1">To</p>
                     </div>
                   </div>
@@ -133,13 +158,6 @@ export default function TransactionDetailsPage() {
                   <p className="text-4xl font-bold text-primary">${transaction.amount.toFixed(2)}</p>
                 </div>
 
-                {transaction.message && (
-                  <div className="border-b border-border pb-6">
-                    <p className="text-muted text-sm mb-2">Message</p>
-                    <p className="text-foreground">{transaction.message}</p>
-                  </div>
-                )}
-
                 <div className="border-b border-border pb-6">
                   <p className="text-muted text-sm mb-2">Transaction Hash</p>
                   <p className="font-mono text-xs text-accent break-all">{transaction.hash}</p>
@@ -147,17 +165,17 @@ export default function TransactionDetailsPage() {
 
                 <div>
                   <p className="text-muted text-sm mb-2">Timestamp</p>
-                  <p>{new Date(transaction.timestamp).toLocaleString()}</p>
+                  <p>{toDate(transaction.timestamp).toLocaleString()}</p>
                 </div>
 
-                {transaction.blockNumber && (
+                {transaction.block_number && (
                   <div className="block">
                     <p className="text-muted text-sm mb-2">Block Number</p>
                     <Link
-                      href={`/blocks/${transaction.blockNumber}`}
+                      href={`/blocks/${transaction.block_number}`}
                       className="text-accent hover:underline font-mono"
                     >
-                      Block #{transaction.blockNumber}
+                      Block #{transaction.block_number}
                     </Link>
                   </div>
                 )}
@@ -167,13 +185,19 @@ export default function TransactionDetailsPage() {
 
           <div className="lg:col-span-1">
             <div className="card mb-6">
-              <h3 className="font-bold text-primary mb-4">Signature Verification</h3>
+              <h3 className="font-bold text-primary mb-4">External Verification</h3>
               <button
-                onClick={verifySignature}
+                onClick={verifyTransaction}
                 className="btn btn-primary w-full mb-4"
               >
-                Verify Signature
+                Verify Transaction
               </button>
+
+              {verifyError && (
+                <div className="p-3 rounded-lg text-center bg-destructive/10 text-destructive border border-destructive mb-4">
+                  <p className="text-sm">{verifyError}</p>
+                </div>
+              )}
 
               {verified !== null && (
                 <div className={`p-3 rounded-lg text-center ${
@@ -182,7 +206,7 @@ export default function TransactionDetailsPage() {
                     : 'bg-destructive/10 text-destructive border border-destructive'
                 }`}>
                   <p className="font-medium">
-                    {verified ? 'Valid Signature' : 'Invalid Signature'}
+                    {verified ? 'Valid Transaction' : 'Invalid Transaction'}
                   </p>
                 </div>
               )}

@@ -1,17 +1,20 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import PrivateLayout from '@/components/PrivateLayout'
-import axios from 'axios'
+import { api } from '@/lib/api'
 
 interface AuditEvent {
-  id: string
-  eventType: string
-  accountId: string
-  description: string
+  event_id: string
+  event_type: string
+  action: string
+  account_id: string
+  details: string
   timestamp: string
-  status: string
+  entity_type: string
+  entity_id: string
+  event_hash: string
 }
 
 export default function AuditPage() {
@@ -20,21 +23,27 @@ export default function AuditPage() {
   const [error, setError] = useState('')
   const [eventTypeFilter, setEventTypeFilter] = useState('all')
 
-  useEffect(() => {
-    fetchAuditEvents()
-  }, [eventTypeFilter])
-
-  const fetchAuditEvents = async () => {
+  const fetchAuditEvents = useCallback(async () => {
     try {
       setLoading(true)
-      const response = await axios.get('http://localhost:8080/audit/events')
-      setEvents(response.data?.events || [])
+      const response =
+        eventTypeFilter === 'all'
+          ? await api.get('/audit/events')
+          : await api.get(`/audit/events/type/${eventTypeFilter}`)
+
+      const payload = response.data
+      const list = Array.isArray(payload) ? payload : payload?.events
+      setEvents(Array.isArray(list) ? list : [])
     } catch (err: any) {
       setError('Failed to load audit log')
     } finally {
       setLoading(false)
     }
-  }
+  }, [eventTypeFilter])
+
+  useEffect(() => {
+    fetchAuditEvents()
+  }, [fetchAuditEvents])
 
   return (
     <PrivateLayout>
@@ -50,7 +59,7 @@ export default function AuditPage() {
 
         <div className="card mb-6">
           <div className="flex gap-2 flex-wrap">
-            {['all', 'create', 'update', 'delete', 'verify'].map((type) => (
+            {['all', 'transaction', 'block', 'authentication', 'account'].map((type) => (
               <button
                 key={type}
                 onClick={() => setEventTypeFilter(type)}
@@ -85,29 +94,29 @@ export default function AuditPage() {
               </thead>
               <tbody>
                 {events.map((event) => (
-                  <tr key={event.id} className="border-b border-border hover:bg-muted/5">
+                  <tr key={event.event_id} className="border-b border-border hover:bg-muted/5">
                     <td className="py-3 px-4">
                       <span className="px-2 py-1 rounded text-xs font-medium bg-primary/10 text-primary">
-                        {event.eventType}
+                        {event.event_type}
                       </span>
                     </td>
-                    <td className="py-3 px-4 text-sm">{event.description}</td>
-                    <td className="py-3 px-4 text-sm font-mono text-accent">{event.accountId.substring(0, 16)}...</td>
+                    <td className="py-3 px-4 text-sm">
+                      <span className="text-muted">{event.action}</span>
+                      <span className="text-muted"> — </span>
+                      {event.details}
+                    </td>
+                    <td className="py-3 px-4 text-sm font-mono text-accent">{event.account_id.substring(0, 16)}...</td>
                     <td className="py-3 px-4 text-sm text-muted">
                       {new Date(event.timestamp).toLocaleString()}
                     </td>
                     <td className="py-3 px-4">
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${
-                        event.status === 'success'
-                          ? 'bg-green-500/10 text-green-500'
-                          : 'bg-primary/10 text-primary'
-                      }`}>
-                        {event.status}
+                      <span className="px-2 py-1 rounded text-xs font-medium bg-muted/20">
+                        {event.entity_type}
                       </span>
                     </td>
                     <td className="py-3 px-4 text-right">
                       <Link
-                        href={`/audit/${event.id}`}
+                        href={`/audit/${event.event_id}`}
                         className="text-accent hover:underline text-sm"
                       >
                         View

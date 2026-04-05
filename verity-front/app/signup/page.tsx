@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import axios from 'axios'
+import { api } from '@/lib/api'
 
 export default function SignUpPage() {
   const router = useRouter()
@@ -54,7 +54,7 @@ export default function SignUpPage() {
     setLoading(true)
 
     try {
-      const response = await axios.post('http://localhost:8080/api/auth/signup', {
+      const response = await api.post('/api/auth/signup', {
         name: formData.name,
         email: formData.email,
         password: formData.password,

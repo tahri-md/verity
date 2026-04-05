@@ -2,19 +2,23 @@
 
 import { useEffect, useState } from 'react'
 import PrivateLayout from '@/components/PrivateLayout'
-import axios from 'axios'
+import Link from 'next/link'
+import { api } from '@/lib/api'
 
 interface ConsensusState {
-  id: string
-  currentLeader: string
-  votingStatus: string
-  participantCount: number
-  proposalId?: string
-  timestamp: string
+  block_number: number
+  view_number: number
+  leader: string
+  yes_votes: number
+  no_votes: number
+  is_finalized: boolean
+  network_health: string
+  created_at: string
+  updated_at: string
 }
 
 export default function ConsensusPage() {
-  const [consensusState, setConsensusState] = useState<ConsensusState | null>(null)
+  const [states, setStates] = useState<ConsensusState[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -24,18 +28,9 @@ export default function ConsensusPage() {
 
   const fetchConsensusState = async () => {
     try {
-      const response = await axios.get('http://localhost:8080/api/v1/consensus')
-      const dataList = response.data?.data || []
-      const latestData = dataList[0] || response.data
-      const state = {
-        id: latestData.id || 'N/A',
-        currentLeader: latestData.current_leader || 'None',
-        votingStatus: latestData.voting_status || 'Idle',
-        participantCount: latestData.participant_count || 0,
-        proposalId: latestData.proposal_id || undefined,
-        timestamp: latestData.timestamp || new Date().toISOString(),
-      }
-      setConsensusState(state)
+      const response = await api.get('/api/v1/consensus')
+      const list = response.data?.data
+      setStates(Array.isArray(list) ? list : [])
     } catch (err: any) {
       setError('Failed to load consensus state')
     } finally {
@@ -56,7 +51,13 @@ export default function ConsensusPage() {
   return (
     <PrivateLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <h1 className="text-3xl font-bold text-primary mb-8">Consensus</h1>
+        <div className="flex justify-between items-center mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-primary">Consensus</h1>
+            <p className="text-muted">Consensus state per block</p>
+          </div>
+          <Link href="/consensus/new" className="btn btn-primary">Create State</Link>
+        </div>
 
         {error && (
           <div className="bg-destructive/10 border border-destructive text-destructive px-4 py-3 rounded-lg mb-6">
@@ -64,30 +65,39 @@ export default function ConsensusPage() {
           </div>
         )}
 
-        {consensusState && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div className="card">
-              <p className="text-muted text-sm mb-2">Current Leader</p>
-              <p className="text-xl font-bold text-primary font-mono break-all">
-                {consensusState.currentLeader.substring(0, 20)}...
-              </p>
-            </div>
+        <div className="card overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-border">
+                <th className="text-left py-3 px-4 font-semibold text-primary">Block</th>
+                <th className="text-left py-3 px-4 font-semibold text-primary">Leader</th>
+                <th className="text-left py-3 px-4 font-semibold text-primary">Votes</th>
+                <th className="text-left py-3 px-4 font-semibold text-primary">Finalized</th>
+                <th className="text-right py-3 px-4 font-semibold text-primary">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {states.map((s) => (
+                <tr key={s.block_number} className="border-b border-border hover:bg-muted/5">
+                  <td className="py-3 px-4 font-mono">#{s.block_number}</td>
+                  <td className="py-3 px-4 font-mono text-sm text-accent break-all">{s.leader || '—'}</td>
+                  <td className="py-3 px-4 text-sm">yes: {s.yes_votes} / no: {s.no_votes}</td>
+                  <td className="py-3 px-4">
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${s.is_finalized ? 'bg-green-500/10 text-green-500' : 'bg-primary/10 text-primary'}`}>
+                      {s.is_finalized ? 'finalized' : 'open'}
+                    </span>
+                  </td>
+                  <td className="py-3 px-4 text-right">
+                    <Link href={`/consensus/${s.block_number}`} className="text-accent hover:underline text-sm">View</Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
 
-            <div className="card">
-              <p className="text-muted text-sm mb-2">Voting Status</p>
-              <p className="text-xl font-bold text-primary">{consensusState.votingStatus}</p>
-            </div>
-
-            <div className="card">
-              <p className="text-muted text-sm mb-2">Participants</p>
-              <p className="text-xl font-bold text-primary">{consensusState.participantCount}</p>
-            </div>
-          </div>
-        )}
-
-        <div className="card">
-          <h2 className="text-xl font-bold text-primary mb-4">Active Proposals</h2>
-          <p className="text-muted text-center py-8">No active proposals at this time</p>
+          {states.length === 0 && (
+            <div className="text-muted text-center py-8">No consensus states found</div>
+          )}
         </div>
       </div>
     </PrivateLayout>

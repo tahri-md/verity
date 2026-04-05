@@ -4,41 +4,46 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import PrivateLayout from '@/components/PrivateLayout'
-import axios from 'axios'
+import { api } from '@/lib/api'
 
-interface Account {
-  id: string
-  name: string
+async function sha256Hex(input: string): Promise<string> {
+  const encoder = new TextEncoder()
+  const data = encoder.encode(input)
+  const digest = await crypto.subtle.digest('SHA-256', data)
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+}
+
+function generateTxnID(): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return `txn_${crypto.randomUUID()}`
+  }
+  return `txn_${Date.now()}_${Math.random().toString(16).slice(2)}`
 }
 
 export default function CreateTransactionPage() {
   const router = useRouter()
-  const [accounts, setAccounts] = useState<Account[]>([])
   const [formData, setFormData] = useState({
-    fromAccountId: '',
     toAccountId: '',
     amount: '',
     message: '',
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [signature, setSignature] = useState('')
+  const [senderAccountID, setSenderAccountID] = useState<string>('')
 
   useEffect(() => {
-    fetchAccounts()
-  }, [])
-
-  const fetchAccounts = async () => {
-    try {
-      const token = localStorage.getItem('token')
-      const response = await axios.get('http://localhost:8080/api/accounts', {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      setAccounts(response.data.data || [])
-    } catch (err) {
-      setError('Failed to load accounts')
+    const userData = localStorage.getItem('user')
+    if (userData) {
+      try {
+        const parsed = JSON.parse(userData)
+        setSenderAccountID(parsed?.account_id || '')
+      } catch {
+        setSenderAccountID('')
+      }
     }
-  }
+  }, [])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     setFormData({
@@ -47,49 +52,48 @@ export default function CreateTransactionPage() {
     })
   }
 
-  const handleSign = async () => {
-    try {
-      const token = localStorage.getItem('token')
-      const response = await axios.post('http://localhost:8080/api/crypto/sign-transaction', {
-        from: formData.fromAccountId,
-        to: formData.toAccountId,
-        amount: parseFloat(formData.amount),
-        message: formData.message,
-      }, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      setSignature(response.data.signature)
-    } catch (err: any) {
-      setError('Failed to sign transaction')
-    }
-  }
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
 
-    if (!signature) {
-      setError('Transaction must be signed first')
+    if (!senderAccountID) {
+      setError('No authenticated account found. Please log in again.')
+      return
+    }
+
+    const amountInt = Number.parseInt(formData.amount, 10)
+    if (!Number.isFinite(amountInt) || amountInt <= 0) {
+      setError('Amount must be a positive integer')
       return
     }
 
     setLoading(true)
 
     try {
-      const token = localStorage.getItem('token')
-      await axios.post('http://localhost:8080/api/transactions', {
-        from: formData.fromAccountId,
-        to: formData.toAccountId,
-        amount: parseFloat(formData.amount),
+      const userData = localStorage.getItem('user')
+      const user = userData ? JSON.parse(userData) : null
+
+      const txnID = generateTxnID()
+      const timestamp = Date.now()
+      const hash = await sha256Hex(`${senderAccountID}${formData.toAccountId}${amountInt}`)
+
+      await api.post('/api/v1/transactions', {
+        txn_id: txnID,
+        to_account: formData.toAccountId,
+        amount: amountInt,
+        nonce: (user?.nonce ?? 0) + 1,
+        timestamp,
+        signature: '',
+        public_key: user?.public_key || '',
+        status: 'pending',
+        hash,
+        // Keep message for UI only; backend will ignore unknown fields.
         message: formData.message,
-        signature,
-      }, {
-        headers: { Authorization: `Bearer ${token}` },
       })
 
       router.push('/transactions')
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to create transaction')
+      setError(err.response?.data?.error || err.response?.data?.message || 'Failed to create transaction')
     } finally {
       setLoading(false)
     }
@@ -113,42 +117,28 @@ export default function CreateTransactionPage() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium mb-2">From Account</label>
-                <select
-                  name="fromAccountId"
-                  value={formData.fromAccountId}
-                  onChange={handleChange}
-                  className="input-field w-full"
-                  required
-                >
-                  <option value="">Select account...</option>
-                  {accounts.map((acc) => (
-                    <option key={acc.id} value={acc.id}>
-                      {acc.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div>
+              <label className="block text-sm font-medium mb-2">From Account</label>
+              <input
+                type="text"
+                value={senderAccountID || '—'}
+                className="input-field w-full"
+                disabled
+              />
+              <p className="text-xs text-muted mt-2">Sender is always your authenticated account.</p>
+            </div>
 
-              <div>
-                <label className="block text-sm font-medium mb-2">To Account</label>
-                <select
-                  name="toAccountId"
-                  value={formData.toAccountId}
-                  onChange={handleChange}
-                  className="input-field w-full"
-                  required
-                >
-                  <option value="">Select account...</option>
-                  {accounts.map((acc) => (
-                    <option key={acc.id} value={acc.id}>
-                      {acc.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div>
+              <label className="block text-sm font-medium mb-2">To Account</label>
+              <input
+                type="text"
+                name="toAccountId"
+                value={formData.toAccountId}
+                onChange={handleChange}
+                className="input-field w-full"
+                placeholder="verity_..."
+                required
+              />
             </div>
 
             <div>
@@ -159,8 +149,8 @@ export default function CreateTransactionPage() {
                 value={formData.amount}
                 onChange={handleChange}
                 className="input-field w-full"
-                placeholder="0.00"
-                step="0.01"
+                placeholder="0"
+                step="1"
                 required
               />
             </div>
@@ -177,30 +167,10 @@ export default function CreateTransactionPage() {
               />
             </div>
 
-            <div className="border-t border-border pt-6">
-              <div className="flex gap-4 mb-4">
-                <button
-                  type="button"
-                  onClick={handleSign}
-                  disabled={!formData.fromAccountId || !formData.toAccountId || !formData.amount}
-                  className="btn btn-secondary flex-1"
-                >
-                  Sign Transaction
-                </button>
-              </div>
-
-              {signature && (
-                <div className="bg-green-500/10 border border-green-500 rounded-lg p-4">
-                  <p className="text-sm font-medium text-green-500 mb-2">Transaction Signed</p>
-                  <p className="text-xs font-mono text-accent break-all">{signature}</p>
-                </div>
-              )}
-            </div>
-
             <div className="flex gap-4 pt-6 border-t border-border">
               <button
                 type="submit"
-                disabled={loading || !signature}
+                disabled={loading}
                 className="btn btn-primary flex-1"
               >
                 {loading ? 'Submitting...' : 'Submit Transaction'}

@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import PrivateLayout from '@/components/PrivateLayout'
-import axios from 'axios'
+import { api } from '@/lib/api'
 
 export default function SignatureVerifyPage() {
   const [formData, setFormData] = useState({
@@ -29,16 +29,11 @@ export default function SignatureVerifyPage() {
     setLoading(true)
 
     try {
-      const token = localStorage.getItem('token')
-      const response = await axios.post(
-        'http://localhost:8080/api/crypto/verify-signature',
-        {
-          message: formData.message,
-          signature: formData.signature,
-          publicKey: formData.publicKey,
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
-      )
+      const response = await api.post('/api/crypto/verify-signature', {
+        message: formData.message,
+        signature: formData.signature,
+        publicKey: formData.publicKey,
+      })
       setResult(response.data)
     } catch (err: any) {
       setError(err.response?.data?.message || 'Verification failed')
@@ -66,13 +61,13 @@ export default function SignatureVerifyPage() {
 
             <form onSubmit={handleVerify} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-2">Message</label>
+                <label className="block text-sm font-medium mb-2">Message or Hash</label>
                 <textarea
                   name="message"
                   value={formData.message}
                   onChange={handleChange}
                   className="input-field w-full"
-                  placeholder="Enter the original message..."
+                  placeholder="Either a raw message, or a 64-hex sha256 digest"
                   rows={3}
                   required
                 />

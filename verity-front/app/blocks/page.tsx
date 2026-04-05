@@ -3,15 +3,14 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import PrivateLayout from '@/components/PrivateLayout'
-import axios from 'axios'
+import { api } from '@/lib/api'
 
 interface Block {
-  id: string
-  number: number
-  merkleRoot: string
-  hash: string
-  transactionCount: number
+  block_number: number
+  block_hash: string
+  merkle_root: string
   timestamp: string
+  transactions?: any[]
 }
 
 export default function BlocksPage() {
@@ -26,7 +25,7 @@ export default function BlocksPage() {
   const fetchBlocks = async () => {
     try {
       setLoading(true)
-      const response = await axios.get('http://localhost:8080/blocks')
+      const response = await api.get('/blocks')
       setBlocks(Array.isArray(response.data) ? response.data : [])
     } catch (err: any) {
       setError('Failed to load blocks')
@@ -57,18 +56,18 @@ export default function BlocksPage() {
           <div className="mt-6 grid grid-cols-1 gap-4">
             {blocks.map((block) => (
               <Link
-                key={block.id}
-                href={`/blocks/${block.id}`}
+                key={block.block_number}
+                href={`/blocks/${block.block_number}`}
                 className="card hover:border-primary transition-colors cursor-pointer"
               >
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-3">
                       <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center text-primary-foreground font-bold">
-                        {block.number}
+                        {block.block_number}
                       </div>
                       <div>
-                        <h3 className="font-bold text-primary">Block #{block.number}</h3>
+                        <h3 className="font-bold text-primary">Block #{block.block_number}</h3>
                         <p className="text-xs text-muted">{new Date(block.timestamp).toLocaleString()}</p>
                       </div>
                     </div>
@@ -76,17 +75,17 @@ export default function BlocksPage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                       <div>
                         <p className="text-xs text-muted mb-1">Merkle Root</p>
-                        <p className="font-mono text-xs text-accent break-all">{block.merkleRoot.substring(0, 32)}...</p>
+                        <p className="font-mono text-xs text-accent break-all">{block.merkle_root?.substring(0, 32)}...</p>
                       </div>
                       <div>
                         <p className="text-xs text-muted mb-1">Hash</p>
-                        <p className="font-mono text-xs text-accent break-all">{block.hash.substring(0, 32)}...</p>
+                        <p className="font-mono text-xs text-accent break-all">{block.block_hash?.substring(0, 32)}...</p>
                       </div>
                     </div>
                   </div>
 
                   <div className="text-right ml-4">
-                    <p className="text-2xl font-bold text-primary">{block.transactionCount}</p>
+                    <p className="text-2xl font-bold text-primary">{block.transactions?.length ?? 0}</p>
                     <p className="text-xs text-muted">transactions</p>
                   </div>
                 </div>

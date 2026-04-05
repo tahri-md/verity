@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import axios from 'axios'
+import { api } from '@/lib/api'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -18,7 +18,7 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      const response = await axios.post('http://localhost:8080/api/auth/login', {
+      const response = await api.post('/api/auth/login', {
         email,
         password,
       })
