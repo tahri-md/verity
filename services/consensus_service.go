@@ -127,3 +127,22 @@ func (s *ConsensusService) GetLatestConsensusState() (*models.ConsensusState, er
 	}
 	return &state, nil
 }
+
+// GetAllConsensusStates retrieves all consensus states with pagination
+func (s *ConsensusService) GetAllConsensusStates(limit, offset int) ([]models.ConsensusState, int64, error) {
+	var states []models.ConsensusState
+	var total int64
+
+	if err := s.db.Model(&models.ConsensusState{}).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	if err := s.db.Order("block_number DESC").Limit(limit).Offset(offset).Find(&states).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return []models.ConsensusState{}, 0, nil
+		}
+		return nil, 0, err
+	}
+
+	return states, total, nil
+}

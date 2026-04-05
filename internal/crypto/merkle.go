@@ -117,56 +117,6 @@ func VerifySignature(pubKeyHex, sigHex, hashHex string) bool {
 	return ecdsa.Verify(&pubKey, hashBytes, r, s)
 }
 
-// GenerateKeyPair generates a new ECDSA key pair using P-256 curve
-func GenerateKeyPair() (string, string, error) {
-	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		return "", "", err
-	}
-
-	// Encode public key
-	pubKeyBytes := elliptic.Marshal(elliptic.P256(), privateKey.PublicKey.X, privateKey.PublicKey.Y)
-	pubKeyHex := hex.EncodeToString(pubKeyBytes)
-
-	// Encode private key
-	privKeyBytes := privateKey.D.Bytes()
-	privKeyHex := hex.EncodeToString(privKeyBytes)
-
-	return privKeyHex, pubKeyHex, nil
-}
-
-// SignTransaction signs a transaction hash with the private key
-func SignTransaction(privKeyHex string, txHash string) (string, error) {
-	privKeyBytes, err := hex.DecodeString(privKeyHex)
-	if err != nil {
-		return "", err
-	}
-
-	privateKey := &ecdsa.PrivateKey{
-		PublicKey: ecdsa.PublicKey{
-			Curve: elliptic.P256(),
-		},
-		D: new(big.Int).SetBytes(privKeyBytes),
-	}
-
-	// Properly set the public key
-	privateKey.PublicKey.X, privateKey.PublicKey.Y = privateKey.PublicKey.Curve.ScalarBaseMult(privateKey.D.Bytes())
-
-	hashBytes, err := hex.DecodeString(txHash)
-	if err != nil {
-		return "", err
-	}
-
-	r, s, err := ecdsa.Sign(rand.Reader, privateKey, hashBytes)
-	if err != nil {
-		return "", err
-	}
-
-	// Concatenate r and s
-	signature := append(r.Bytes(), s.Bytes()...)
-	return hex.EncodeToString(signature), nil
-}
-
 func VerifyMerkleProof(txHash string, proof []models.ProofNode, root string) bool {
 
 	computed := txHash

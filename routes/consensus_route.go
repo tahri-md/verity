@@ -12,6 +12,35 @@ import (
 func RegisterConsensusRoutes(router *gin.Engine, db *gorm.DB) {
 	consensusService := services.NewConsensusService(db)
 
+	// Get all consensus records
+	router.GET("/api/v1/consensus", func(c *gin.Context) {
+		limitStr := c.DefaultQuery("limit", "10")
+		offsetStr := c.DefaultQuery("offset", "0")
+
+		limit, err := strconv.Atoi(limitStr)
+		if err != nil || limit <= 0 {
+			limit = 10
+		}
+
+		offset, err := strconv.Atoi(offsetStr)
+		if err != nil || offset < 0 {
+			offset = 0
+		}
+
+		states, total, err := consensusService.GetAllConsensusStates(limit, offset)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"total":  total,
+			"limit":  limit,
+			"offset": offset,
+			"data":   states,
+		})
+	})
+
 	// Create consensus state
 	router.POST("/consensus", func(c *gin.Context) {
 		var state models.ConsensusState
