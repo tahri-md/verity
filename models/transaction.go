@@ -1,7 +1,7 @@
 package models
 
 type Transaction struct {
-	TxnID       string `json:"txn_id"`
+	TxnID       string `gorm:"primaryKey" json:"txn_id"`
 	FromAccount string `json:"from_account"`
 	ToAccount   string `json:"to_account"`
 	Amount      int64  `json:"amount"`

@@ -30,7 +30,7 @@ func (s *TransactionService) GetAllTransactions() ([]models.Transaction, error) 
 }
 func (s *TransactionService) GetTransactionByID(id string) (*models.Transaction, error) {
 	var transaction models.Transaction
-	if err := s.db.First(&transaction, "id = ?", id).Error; err != nil {
+	if err := s.db.First(&transaction, "txn_id = ?", id).Error; err != nil {
 		return nil, err
 	}
 	return &transaction, nil
@@ -38,17 +38,16 @@ func (s *TransactionService) GetTransactionByID(id string) (*models.Transaction,
 
 func (s *TransactionService) GetTransactionProof(txnID string) (*models.MerkleProof, error) {
 	var transaction models.Transaction
-	if err := s.db.First(&transaction, "id = ?", txnID).Error; err != nil {
+	if err := s.db.First(&transaction, "txn_id = ?", txnID).Error; err != nil {
 		return nil, err
 	}
-	var blocks []models.Block
-	if err := s.db.Find(&blocks, "number = ?", transaction.BlockNumber).Error; err != nil {
+	var block models.Block
+	if err := s.db.First(&block, "block_number = ?", transaction.BlockNumber).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("block not found")
+		}
 		return nil, err
 	}
-	if len(blocks) == 0 {
-		return nil, errors.New("block not found")
-	}
-	block := blocks[0]
 
 	var hashes []string
 	for _, txn := range block.Transactions {
@@ -60,12 +59,24 @@ func (s *TransactionService) GetTransactionProof(txnID string) (*models.MerklePr
 		return nil, err
 	}
 
+	proofNodes, err := crypto.GenerateMerkleProofNodes(hashes, transaction.Hash)
+	if err != nil {
+		return nil, err
+	}
+
 	root := crypto.BuildMerkleRoot(hashes)
 
 	return &models.MerkleProof{
 		TransactionID: transaction.TxnID,
 		BlockNumber:   uint64(transaction.BlockNumber),
 		Hashes:        proof,
+		Positions: func() []string {
+			positions := make([]string, 0, len(proofNodes))
+			for _, n := range proofNodes {
+				positions = append(positions, n.Position)
+			}
+			return positions
+		}(),
 		MerkleRoot:    root,
 	}, nil
 
@@ -90,7 +101,7 @@ func (s *TransactionService) VerifyTransactionExternally(
 
 	// 3️⃣ Load block
 	var block models.Block
-	if err := s.db.First(&block, "number = ?", txn.BlockNumber).Error; err != nil {
+	if err := s.db.First(&block, "block_number = ?", txn.BlockNumber).Error; err != nil {
 		return false, errors.New("block not found")
 	}
 

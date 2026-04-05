@@ -67,6 +67,7 @@ func main() {
 	routes.RegisterConsensusRoutes(router, db)
 	routes.RegisterAuditRoutes(router, db)
 	routes.RegisterLedgerRoutes(router, db)
+	routes.RegisterCryptoRoutes(router)
 	router.Run(":8080")
 	// r.GET("/hello", func(c *gin.Context) {
 	// 	c.JSON(200, gin.H{

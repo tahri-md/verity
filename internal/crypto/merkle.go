@@ -83,6 +83,49 @@ func GenerateMerkleProof(hashes []string, target string) ([]string, error) {
 	return proof, nil
 }
 
+func GenerateMerkleProofNodes(hashes []string, target string) ([]models.ProofNode, error) {
+	var proof []models.ProofNode
+
+	index := -1
+	for i, h := range hashes {
+		if h == target {
+			index = i
+			break
+		}
+	}
+	if index == -1 {
+		return nil, errors.New("transaction not found in block")
+	}
+
+	for len(hashes) > 1 {
+		if index%2 == 0 {
+			// current is left; sibling on the right (or duplicated if missing)
+			siblingIndex := index + 1
+			if siblingIndex >= len(hashes) {
+				siblingIndex = index
+			}
+			proof = append(proof, models.ProofNode{Hash: hashes[siblingIndex], Position: "right"})
+		} else {
+			// current is right; sibling on the left
+			proof = append(proof, models.ProofNode{Hash: hashes[index-1], Position: "left"})
+		}
+
+		var newLevel []string
+		for i := 0; i < len(hashes); i += 2 {
+			if i+1 < len(hashes) {
+				newLevel = append(newLevel, Hash(hashes[i]+hashes[i+1]))
+			} else {
+				newLevel = append(newLevel, Hash(hashes[i]+hashes[i]))
+			}
+		}
+
+		index = index / 2
+		hashes = newLevel
+	}
+
+	return proof, nil
+}
+
 func VerifySignature(pubKeyHex, sigHex, hashHex string) bool {
 
 	pubBytes, err := hex.DecodeString(pubKeyHex)
@@ -178,10 +221,18 @@ func SignTransaction(privateKey *ecdsa.PrivateKey, txHash string) (string, error
 
 // VerifyTransactionSignature verifies a transaction signature
 func VerifyTransactionSignature(tx *models.Transaction) bool {
-	// Hash the transaction data for signing
-	data := tx.FromAccount + tx.ToAccount + strconv.FormatInt(tx.Amount, 10) + strconv.FormatUint(tx.Nonce, 10)
-	hash := sha256.Sum256([]byte(data))
-	hashHex := hex.EncodeToString(hash[:])
-	
-	return VerifySignature(tx.PublicKey, tx.Signature, hashHex)
+	if tx == nil {
+		return false
+	}
+	if tx.Hash == "" || tx.Signature == "" || tx.PublicKey == "" {
+		return false
+	}
+
+	// Ensure the stored hash matches the canonical transaction hash.
+	// (This matches HashTransaction and VerifyTransactionExternally.)
+	if HashTransaction(*tx) != tx.Hash {
+		return false
+	}
+
+	return VerifySignature(tx.PublicKey, tx.Signature, tx.Hash)
 }

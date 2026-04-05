@@ -27,31 +27,33 @@ func TestHash(t *testing.T) {
 }
 
 func TestGenerateKeyPair(t *testing.T) {
-	privKey, pubKey, err := GenerateKeyPair()
+	privKey, err := GenerateKeyPair()
 	if err != nil {
 		t.Fatalf("Failed to generate key pair: %v", err)
 	}
 
-	if len(privKey) == 0 {
-		t.Error("Expected non-empty private key")
+	if privKey == nil {
+		t.Error("Expected non-nil private key")
 	}
 
+	pubKey := GetPublicKeyHex(privKey)
 	if len(pubKey) == 0 {
 		t.Error("Expected non-empty public key")
 	}
 
-	// Public key should be longer (it has X and Y coordinates)
-	if len(pubKey) != 132 {
-		t.Errorf("Expected public key length 132, got %d", len(pubKey))
+	// P-256 uncompressed point is 65 bytes => 130 hex chars.
+	if len(pubKey) != 130 {
+		t.Errorf("Expected public key length 130, got %d", len(pubKey))
 	}
 }
 
 func TestSignAndVerify(t *testing.T) {
 	// Generate key pair
-	privKey, pubKey, err := GenerateKeyPair()
+	privKey, err := GenerateKeyPair()
 	if err != nil {
 		t.Fatalf("Failed to generate key pair: %v", err)
 	}
+	pubKey := GetPublicKeyHex(privKey)
 
 	// Create test data
 	testData := "test_transaction_data"
@@ -140,16 +142,19 @@ func TestGenerateMerkleProof(t *testing.T) {
 }
 
 func TestVerifyTransactionSignature(t *testing.T) {
-	privKey, pubKey, _ := GenerateKeyPair()
-	txHash := Hash("test_transaction")
-
-	signature, _ := SignTransaction(privKey, txHash)
+	privKey, _ := GenerateKeyPair()
+	pubKey := GetPublicKeyHex(privKey)
 
 	tx := &models.Transaction{
-		Hash:      txHash,
-		Signature: signature,
-		PublicKey: pubKey,
+		FromAccount: "a",
+		ToAccount:   "b",
+		Amount:      123,
+		Hash:        HashTransaction(models.Transaction{FromAccount: "a", ToAccount: "b", Amount: 123}),
+		PublicKey:   pubKey,
 	}
+
+	signature, _ := SignTransaction(privKey, tx.Hash)
+	tx.Signature = signature
 
 	isValid := VerifyTransactionSignature(tx)
 	if !isValid {
