@@ -8,42 +8,24 @@ import { api } from '@/lib/api'
 
 export default function CreateConsensusPage() {
   const router = useRouter()
-  const [formData, setFormData] = useState({
-    block_number: '',
-    view_number: '0',
-    network_health: 'healthy',
-    leader: '',
-  })
+  const [blockNumber, setBlockNumber] = useState('')
+  const [viewNumber, setViewNumber] = useState('0')
+  const [networkHealth, setNetworkHealth] = useState('healthy')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    })
-  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+    const bn = Number(blockNumber)
+    if (!Number.isFinite(bn) || bn <= 0) { setError('Enter a valid block number'); return }
     setLoading(true)
-
     try {
-      const bn = Number(formData.block_number)
-      const vn = Number(formData.view_number)
-      if (!Number.isFinite(bn) || bn <= 0) {
-        setError('Enter a valid block number')
-        return
-      }
-
       await api.post('/consensus', {
         block_number: bn,
-        view_number: Number.isFinite(vn) ? vn : 0,
-        network_health: formData.network_health,
-        leader: formData.leader,
+        view_number: Number(viewNumber) || 0,
+        network_health: networkHealth,
       })
-
       router.push('/consensus')
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to create consensus state')
@@ -54,85 +36,44 @@ export default function CreateConsensusPage() {
 
   return (
     <PrivateLayout>
-      <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Link href="/consensus" className="text-accent hover:underline mb-4 inline-block">
-          ← Back to Consensus
+      <div className="section main-container max-w-md">
+        <Link href="/consensus" className="text-xs text-foreground/40 hover:text-foreground/70 transition-colors mb-6 inline-block">
+          ← consensus
         </Link>
 
-        <div className="card border-2">
-          <h1 className="text-3xl font-bold text-primary mb-2">Create Consensus State</h1>
-          <p className="text-muted mb-8">Initialize consensus tracking for a block</p>
+        <p className="text-xs uppercase tracking-widest text-foreground/30 font-medium mb-1">New consensus state</p>
+        <h1 className="text-2xl font-bold mb-8">Initialize voting</h1>
 
-          {error && (
-            <div className="bg-destructive/10 border border-destructive text-destructive px-4 py-3 rounded-lg mb-6">
-              {error}
-            </div>
-          )}
+        {error && (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 mb-6">
+            <p className="text-sm text-destructive">{error}</p>
+          </div>
+        )}
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium mb-2">Block Number</label>
-              <input
-                type="number"
-                name="block_number"
-                value={formData.block_number}
-                onChange={handleChange}
-                className="input-field w-full"
-                placeholder="e.g. 1"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2">View Number</label>
-              <input
-                type="number"
-                name="view_number"
-                value={formData.view_number}
-                onChange={handleChange}
-                className="input-field w-full"
-                placeholder="0"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2">Network Health</label>
-              <input
-                type="text"
-                name="network_health"
-                value={formData.network_health}
-                onChange={handleChange}
-                className="input-field w-full"
-                placeholder="healthy | degraded | partitioned"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2">Leader (optional)</label>
-              <input
-                type="text"
-                name="leader"
-                value={formData.leader}
-                onChange={handleChange}
-                className="input-field w-full"
-                placeholder="validator_1"
-              />
-            </div>
-
-            <div className="flex gap-4 pt-6 border-t border-border">
-              <button
-                type="submit"
-                disabled={loading}
-                className="btn btn-primary flex-1"
-              >
-                {loading ? 'Creating...' : 'Create State'}
-              </button>
-              <Link href="/consensus" className="btn btn-secondary flex-1 text-center">
-                Cancel
-              </Link>
-            </div>
-          </form>
-        </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-xs uppercase tracking-wide font-medium text-foreground/50 mb-1.5">Block number</label>
+            <input type="number" value={blockNumber} onChange={e => setBlockNumber(e.target.value)} className="input-field w-full" placeholder="e.g. 1" min="1" required />
+          </div>
+          <div>
+            <label className="block text-xs uppercase tracking-wide font-medium text-foreground/50 mb-1.5">View number</label>
+            <input type="number" value={viewNumber} onChange={e => setViewNumber(e.target.value)} className="input-field w-full" placeholder="0" />
+          </div>
+          <div>
+            <label className="block text-xs uppercase tracking-wide font-medium text-foreground/50 mb-1.5">Network health</label>
+            <select value={networkHealth} onChange={e => setNetworkHealth(e.target.value)} className="input-field w-full">
+              <option value="healthy">Healthy</option>
+              <option value="degraded">Degraded</option>
+              <option value="partitioned">Partitioned</option>
+            </select>
+          </div>
+          <div className="pt-4 border-t border-border/40 flex gap-3">
+            <button type="submit" disabled={loading} className="flex-1 py-2.5 rounded-lg font-medium text-sm disabled:opacity-40" style={{ background: '#7c5cfc', color: '#fff' }}>
+              {loading ? 'Creating…' : 'Create state'}
+            </button>
+            <Link href="/consensus" className="btn btn-ghost flex-1 text-center text-sm">Cancel</Link>
+          </div>
+        </form>
       </div>
     </PrivateLayout>
   )
