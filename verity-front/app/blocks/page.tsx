@@ -18,16 +18,14 @@ export default function BlocksPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  useEffect(() => {
-    fetchBlocks()
-  }, [])
+  useEffect(() => { fetchBlocks() }, [])
 
   const fetchBlocks = async () => {
     try {
       setLoading(true)
       const response = await api.get('/blocks')
       setBlocks(Array.isArray(response.data) ? response.data : [])
-    } catch (err: any) {
+    } catch {
       setError('Failed to load blocks')
     } finally {
       setLoading(false)
@@ -36,65 +34,84 @@ export default function BlocksPage() {
 
   return (
     <PrivateLayout>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div>
-          <h1 className="text-3xl font-bold text-primary mb-2">Blocks</h1>
-          <p className="text-muted">View and verify blockchain blocks</p>
+      <div className="section main-container">
+
+        <div className="flex justify-between items-start md:items-center md:flex-row flex-col gap-4 mb-8">
+          <div>
+            <p className="font-mono text-[11px] text-foreground/30 uppercase tracking-widest mb-1">chain</p>
+            <h1 className="text-xl font-bold tracking-tight">Blocks</h1>
+          </div>
+          <Link
+            href="/blocks/new"
+            className="px-4 py-2 rounded-md text-sm font-medium"
+            style={{ background: '#7c5cfc', color: '#fff' }}
+          >
+            Add block
+          </Link>
         </div>
 
         {error && (
-          <div className="bg-destructive/10 border border-destructive text-destructive px-4 py-3 rounded-lg mt-6 mb-6">
-            {error}
+          <div className="border-l-2 border-destructive pl-3 mb-6">
+            <p className="text-sm text-destructive">{error}</p>
           </div>
         )}
 
         {loading ? (
-          <div className="text-center py-12 mt-6">
-            <div className="inline-block w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+          <div className="py-20 flex flex-col items-center gap-3">
+            <div className="w-5 h-5 border border-border border-t-[#7c5cfc] rounded-full animate-spin" />
+            <p className="font-mono text-[11px] text-foreground/30 uppercase tracking-widest">fetching</p>
           </div>
         ) : blocks.length > 0 ? (
-          <div className="mt-6 grid grid-cols-1 gap-4">
+          <div className="space-y-px">
             {blocks.map((block) => (
               <Link
                 key={block.block_number}
                 href={`/blocks/${block.block_number}`}
-                className="card hover:border-primary transition-colors cursor-pointer"
+                className="flex items-center gap-6 px-4 py-4 border border-border/30 rounded-md hover:border-[#7c5cfc44] hover:bg-muted/20 transition-all group"
               >
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center text-primary-foreground font-bold">
-                        {block.block_number}
-                      </div>
-                      <div>
-                        <h3 className="font-bold text-primary">Block #{block.block_number}</h3>
-                        <p className="text-xs text-muted">{new Date(block.timestamp).toLocaleString()}</p>
-                      </div>
-                    </div>
+                {/* Block number */}
+                <span
+                  className="font-mono text-xs tabular-nums w-10 text-right flex-shrink-0"
+                  style={{ color: '#7c5cfc' }}
+                >
+                  #{block.block_number}
+                </span>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                      <div>
-                        <p className="text-xs text-muted mb-1">Merkle Root</p>
-                        <p className="font-mono text-xs text-accent break-all">{block.merkle_root?.substring(0, 32)}...</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted mb-1">Hash</p>
-                        <p className="font-mono text-xs text-accent break-all">{block.block_hash?.substring(0, 32)}...</p>
-                      </div>
-                    </div>
+                {/* Hashes */}
+                <div className="flex-1 min-w-0 grid grid-cols-1 md:grid-cols-2 gap-1">
+                  <div className="min-w-0">
+                    <p className="font-mono text-[10px] text-foreground/25 uppercase tracking-widest mb-0.5">merkle</p>
+                    <p className="font-mono text-xs text-foreground/45 truncate">{block.merkle_root?.substring(0, 28)}…</p>
                   </div>
-
-                  <div className="text-right ml-4">
-                    <p className="text-2xl font-bold text-primary">{block.transactions?.length ?? 0}</p>
-                    <p className="text-xs text-muted">transactions</p>
+                  <div className="min-w-0">
+                    <p className="font-mono text-[10px] text-foreground/25 uppercase tracking-widest mb-0.5">hash</p>
+                    <p className="font-mono text-xs text-foreground/45 truncate">{block.block_hash?.substring(0, 28)}…</p>
                   </div>
                 </div>
+
+                {/* Tx count */}
+                <div className="text-right flex-shrink-0">
+                  <p className="font-mono text-sm font-semibold">{block.transactions?.length ?? 0}</p>
+                  <p className="font-mono text-[10px] text-foreground/25 uppercase tracking-widest">txns</p>
+                </div>
+
+                {/* Date */}
+                <div className="text-right flex-shrink-0 hidden md:block">
+                  <p className="font-mono text-xs text-foreground/30">
+                    {new Date(block.timestamp).toLocaleDateString()}
+                  </p>
+                  <p className="font-mono text-[10px] text-foreground/20">
+                    {new Date(block.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                </div>
+
+                <span className="font-mono text-[11px] text-foreground/20 group-hover:text-foreground/50 transition-colors flex-shrink-0">→</span>
               </Link>
             ))}
           </div>
         ) : (
-          <div className="card text-center py-12 mt-6">
-            <p className="text-muted">No blocks found</p>
+          <div className="py-20 text-center">
+            <p className="font-mono text-[11px] text-foreground/30 uppercase tracking-widest">no blocks</p>
           </div>
         )}
       </div>
