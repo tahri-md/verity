@@ -10,6 +10,7 @@ type ConsensusState struct {
 	NoVotes       int64     `json:"no_votes"`
 	IsFinalized   bool      `json:"is_finalized"`
 	NetworkHealth string    `json:"network_health"` // healthy | degraded | partitioned
+	Voters        []string  `gorm:"type:jsonb;serializer:json" json:"voters"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
 }
