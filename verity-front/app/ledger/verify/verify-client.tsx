@@ -15,35 +15,18 @@ export default function LedgerVerifyClient() {
 
   useEffect(() => {
     const fromQuery = searchParams.get('state_hash')
-    if (fromQuery) {
-      setStateHash(fromQuery)
-      return
-    }
-
-    ;(async () => {
-      try {
-        const latest = await api.get('/api/v1/ledger/latest')
-        if (latest.data?.state_hash) setStateHash(String(latest.data.state_hash))
-      } catch {
-        // ignore
-      }
-    })()
+    if (fromQuery) { setStateHash(fromQuery); return }
+    api.get('/api/v1/ledger/latest').then(r => { if (r.data?.state_hash) setStateHash(String(r.data.state_hash)) }).catch(() => {})
   }, [searchParams])
 
-  const handleVerify = async () => {
+  const verify = async () => {
     setError('')
+    setResult(null)
+    if (!stateHash.trim()) { setError('Enter a state hash'); return }
     setLoading(true)
-
     try {
-      if (!stateHash.trim()) {
-        setError('Enter a state hash')
-        return
-      }
-
-      const response = await api.post('/api/v1/ledger/verify', {
-        state_hash: stateHash.trim(),
-      })
-      setResult(response.data)
+      const res = await api.post('/api/v1/ledger/verify', { state_hash: stateHash.trim() })
+      setResult(res.data)
     } catch (err: any) {
       setError(err.response?.data?.error || 'Verification failed')
     } finally {
@@ -53,55 +36,49 @@ export default function LedgerVerifyClient() {
 
   return (
     <PrivateLayout>
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Link href="/ledger" className="text-accent hover:underline mb-4 inline-block">
-          ← Back to Ledger
+      <div className="section main-container max-w-2xl">
+        <Link href="/ledger" className="text-xs text-foreground/40 hover:text-foreground/70 transition-colors mb-6 inline-block">
+          ← ledger
         </Link>
 
-        <div className="card border-2 mb-6">
-          <h1 className="text-3xl font-bold text-primary mb-6">Verify Ledger State</h1>
+        <p className="text-xs uppercase tracking-widest text-foreground/30 font-medium mb-1">Ledger</p>
+        <h1 className="text-2xl font-bold mb-2">Verify ledger state</h1>
+        <p className="text-sm text-foreground/50 mb-8">
+          Confirm that a state hash matches the current account balance snapshot. The latest state hash is pre-filled.
+        </p>
 
-          {error && (
-            <div className="bg-destructive/10 border border-destructive text-destructive px-4 py-3 rounded-lg mb-6">
-              {error}
-            </div>
-          )}
-
-          <p className="text-muted mb-6">
-            Verify the integrity of the blockchain ledger state by checking the state hash and comparing it with previous states.
-          </p>
-
-          <div className="mb-6">
-            <label className="block text-sm font-medium mb-2">State Hash</label>
-            <input
-              value={stateHash}
-              onChange={(e) => setStateHash(e.target.value)}
-              className="input-field w-full font-mono text-xs"
-              placeholder="state_hash"
-            />
+        {error && (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 mb-6">
+            <p className="text-sm text-destructive">{error}</p>
           </div>
+        )}
 
-          <button onClick={handleVerify} disabled={loading} className="btn btn-primary">
-            {loading ? 'Verifying...' : 'Start Verification'}
-          </button>
+        <div className="card mb-4">
+          <label className="block text-xs uppercase tracking-wide font-medium text-foreground/50 mb-1.5">State hash</label>
+          <input value={stateHash} onChange={e => setStateHash(e.target.value)} className="input-field w-full font-mono text-xs" placeholder="64-char hex state hash" />
         </div>
 
-        {result && (
-          <div className={`card border-2 ${result.is_valid ? 'border-green-500' : 'border-destructive'}`}>
-            <h2 className="text-2xl font-bold mb-6">
-              <span className={result.is_valid ? 'text-green-500' : 'text-destructive'}>
-                {result.is_valid ? 'Valid Ledger' : 'Invalid Ledger'}
-              </span>
-            </h2>
+        <button onClick={verify} disabled={loading} className="w-full py-2.5 rounded-lg font-medium text-sm disabled:opacity-40 mb-6" style={{ background: '#7c5cfc', color: '#fff' }}>
+          {loading ? 'Verifying…' : 'Verify state'}
+        </button>
 
-            <div className="space-y-4">
+        {result && (
+          <div
+            className="rounded-lg px-4 py-4"
+            style={{
+              background: result.is_valid ? 'rgba(51,255,160,0.08)' : 'rgba(239,68,68,0.08)',
+              border: `1px solid ${result.is_valid ? 'rgba(51,255,160,0.3)' : 'rgba(239,68,68,0.3)'}`,
+            }}
+          >
+            <p className="text-lg font-bold mb-3" style={{ color: result.is_valid ? '#33ffa0' : '#ef4444' }}>
+              {result.is_valid ? '✓ Ledger state valid' : '✗ Ledger state invalid'}
+            </p>
+            {result.state_hash && (
               <div>
-                <p className="text-muted text-sm mb-2">Current State Hash</p>
-                <p className="font-mono text-xs text-accent break-all bg-muted/10 p-3 rounded">
-                  {result.state_hash}
-                </p>
+                <p className="text-xs text-foreground/40 mb-1">Verified hash</p>
+                <p className="font-mono text-xs text-foreground/60 break-all">{result.state_hash}</p>
               </div>
-            </div>
+            )}
           </div>
         )}
       </div>
