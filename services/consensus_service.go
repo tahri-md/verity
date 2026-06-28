@@ -3,6 +3,7 @@ package services
 import (
 	"errors"
 	"gin-minimal/models"
+
 	"gorm.io/gorm"
 )
 
@@ -46,23 +47,32 @@ func (s *ConsensusService) RegisterVote(blockNumber uint64, validatorID string, 
 	}
 
 	if vote != "yes" && vote != "no" {
-		return errors.New("invalid vote")
+		return errors.New("invalid vote: must be 'yes' or 'no'")
 	}
 
+	// Check if this validator already voted
+	for _, v := range state.Voters {
+		if v == validatorID {
+			return errors.New("validator has already voted on this block")
+		}
+	}
+
+	state.Voters = append(state.Voters, validatorID)
 	if vote == "yes" {
 		state.YesVotes++
 	} else {
 		state.NoVotes++
 	}
 
-	if err := s.db.Save(state).Error; err != nil {
-		return err
-	}
-	return nil
+	return s.db.Save(state).Error
 }
 
 // ElectLeader performs leader election based on voting
 func (s *ConsensusService) ElectLeader(blockNumber uint64, validators []string) (string, error) {
+	if len(validators) == 0 {
+		return "", errors.New("validator list is empty")
+	}
+
 	state, err := s.GetConsensusState(blockNumber)
 	if err != nil {
 		return "", err
@@ -73,19 +83,20 @@ func (s *ConsensusService) ElectLeader(blockNumber uint64, validators []string) 
 		return "", errors.New("no votes cast")
 	}
 
-	// Simple majority-based election
 	requiredVotes := (len(validators) / 2) + 1
-	if state.YesVotes >= int64(requiredVotes) {
-		if state.Leader == "" {
-			state.Leader = validators[0]
-			if err := s.db.Save(state).Error; err != nil {
-				return "", err
-			}
-		}
-		return state.Leader, nil
+	if state.YesVotes < int64(requiredVotes) {
+		return "", errors.New("consensus not reached")
 	}
 
-	return "", errors.New("consensus not reached")
+	if state.Leader == "" {
+		// Round-robin: deterministic, fair, not biased toward index 0
+		state.Leader = validators[blockNumber%uint64(len(validators))] // ← was: validators[0]
+		if err := s.db.Save(state).Error; err != nil {
+			return "", err
+		}
+	}
+
+	return state.Leader, nil
 }
 
 // GetVotingStatus returns current voting status
