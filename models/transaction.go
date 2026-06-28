@@ -11,5 +11,5 @@ type Transaction struct {
 	PublicKey   string `json:"public_key"`
 	Status      string `json:"status"`
 	BlockNumber int64  `json:"block_number,omitempty"`
-	Hash        string `json:"hash"` // Add this line
+	Hash        string `json:"hash"`
 }

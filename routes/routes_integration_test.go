@@ -9,6 +9,7 @@ import (
 
 	"gin-minimal/models"
 	"gin-minimal/services"
+
 	"github.com/gin-gonic/gin"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -163,8 +164,8 @@ func TestCreateTransactionRoute(t *testing.T) {
 
 func TestGetTransactionRoute(t *testing.T) {
 	router, db := setupTestRouter()
-
-	txnService := services.NewTransactionService(db)
+	acctService := services.NewAccountService(db)
+	txnService := services.NewTransactionService(db, acctService)
 	txnService.CreateTransaction(&models.Transaction{
 		TxnID:       "txn_2",
 		FromAccount: "account_1",
@@ -187,7 +188,8 @@ func TestGetTransactionRoute(t *testing.T) {
 func TestGetAllTransactionsRoute(t *testing.T) {
 	router, db := setupTestRouter()
 
-	txnService := services.NewTransactionService(db)
+	acctService := services.NewAccountService(db)
+	txnService := services.NewTransactionService(db, acctService)
 	txnService.CreateTransaction(&models.Transaction{
 		TxnID:  "txn_3",
 		Hash:   "test_hash_3",

@@ -1,9 +1,10 @@
 package services
 
 import (
-	"testing"
 	"gin-minimal/internal/crypto"
 	"gin-minimal/models"
+	"testing"
+
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -16,8 +17,9 @@ func setupTransactionTestDB() *gorm.DB {
 
 func TestCreateTransaction(t *testing.T) {
 	db := setupTransactionTestDB()
-	service := NewTransactionService(db)
 
+	acctService := NewAccountService(db)
+	txnService := NewTransactionService(db, acctService)
 	txHash := crypto.Hash("test_transaction")
 	transaction := &models.Transaction{
 		TxnID:       "txn_1",
@@ -30,7 +32,7 @@ func TestCreateTransaction(t *testing.T) {
 		Hash:        txHash,
 	}
 
-	createdTxn, err := service.CreateTransaction(transaction)
+	createdTxn, err := txnService.CreateTransaction(transaction)
 	if err != nil {
 		t.Fatalf("Failed to create transaction: %v", err)
 	}
@@ -46,8 +48,8 @@ func TestCreateTransaction(t *testing.T) {
 
 func TestGetTransaction(t *testing.T) {
 	db := setupTransactionTestDB()
-	service := NewTransactionService(db)
-
+	acctService := NewAccountService(db)
+	txnService := NewTransactionService(db, acctService)
 	txHash := crypto.Hash("test_transaction_2")
 	transaction := &models.Transaction{
 		TxnID:       "txn_2",
@@ -59,9 +61,9 @@ func TestGetTransaction(t *testing.T) {
 		Status:      "pending",
 		Hash:        txHash,
 	}
-	service.CreateTransaction(transaction)
+	txnService.CreateTransaction(transaction)
 
-	retrieved, err := service.GetTransactionByID("txn_2")
+	retrieved, err := txnService.GetTransactionByID("txn_2")
 	if err != nil {
 		t.Fatalf("Failed to get transaction: %v", err)
 	}
@@ -73,8 +75,8 @@ func TestGetTransaction(t *testing.T) {
 
 func TestGetAllTransactions(t *testing.T) {
 	db := setupTransactionTestDB()
-	service := NewTransactionService(db)
-
+	acctService := NewAccountService(db)
+	txnService := NewTransactionService(db, acctService)
 	txHash1 := crypto.Hash("test_txn_3")
 	txHash2 := crypto.Hash("test_txn_4")
 
@@ -96,10 +98,10 @@ func TestGetAllTransactions(t *testing.T) {
 		Status:      "pending",
 	}
 
-	service.CreateTransaction(txn1)
-	service.CreateTransaction(txn2)
+	txnService.CreateTransaction(txn1)
+	txnService.CreateTransaction(txn2)
 
-	transactions, err := service.GetAllTransactions()
+	transactions, err := txnService.GetAllTransactions()
 	if err != nil {
 		t.Fatalf("Failed to get all transactions: %v", err)
 	}
