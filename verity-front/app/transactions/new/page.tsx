@@ -7,90 +7,46 @@ import PrivateLayout from '@/components/PrivateLayout'
 import { api } from '@/lib/api'
 
 async function sha256Hex(input: string): Promise<string> {
-  const encoder = new TextEncoder()
-  const data = encoder.encode(input)
+  const data = new TextEncoder().encode(input)
   const digest = await crypto.subtle.digest('SHA-256', data)
-  return Array.from(new Uint8Array(digest))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
-}
-
-function generateTxnID(): string {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    return `txn_${crypto.randomUUID()}`
-  }
-  return `txn_${Date.now()}_${Math.random().toString(16).slice(2)}`
+  return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
 export default function CreateTransactionPage() {
   const router = useRouter()
-  const [formData, setFormData] = useState({
-    toAccountId: '',
-    amount: '',
-    message: '',
-  })
+  const [toAccount, setToAccount] = useState('')
+  const [amount, setAmount] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [senderAccountID, setSenderAccountID] = useState<string>('')
+  const [user, setUser] = useState<any>(null)
 
   useEffect(() => {
-    const userData = localStorage.getItem('user')
-    if (userData) {
-      try {
-        const parsed = JSON.parse(userData)
-        setSenderAccountID(parsed?.account_id || '')
-      } catch {
-        setSenderAccountID('')
-      }
-    }
+    try {
+      const raw = localStorage.getItem('user')
+      if (raw) setUser(JSON.parse(raw))
+    } catch {}
   }, [])
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    })
-  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
-
-    if (!senderAccountID) {
-      setError('No authenticated account found. Please log in again.')
-      return
-    }
-
-    const amountInt = Number.parseInt(formData.amount, 10)
-    if (!Number.isFinite(amountInt) || amountInt <= 0) {
-      setError('Amount must be a positive integer')
-      return
-    }
-
+    if (!user?.account_id) { setError('No authenticated account. Please log in again.'); return }
+    const amountInt = Number.parseInt(amount, 10)
+    if (!Number.isFinite(amountInt) || amountInt <= 0) { setError('Amount must be a positive integer'); return }
     setLoading(true)
-
     try {
-      const userData = localStorage.getItem('user')
-      const user = userData ? JSON.parse(userData) : null
-
-      const txnID = generateTxnID()
       const timestamp = Date.now()
-      const hash = await sha256Hex(`${senderAccountID}${formData.toAccountId}${amountInt}`)
-
+      const nonce = (user?.nonce ?? 0) + 1
+      const hash = await sha256Hex(`${user.account_id}${toAccount}${amountInt}${nonce}${timestamp}`)
       await api.post('/api/v1/transactions', {
-        txn_id: txnID,
-        to_account: formData.toAccountId,
+        to_account: toAccount,
         amount: amountInt,
-        nonce: (user?.nonce ?? 0) + 1,
+        nonce,
         timestamp,
         signature: '',
         public_key: user?.public_key || '',
-        status: 'pending',
         hash,
-        // Keep message for UI only; backend will ignore unknown fields.
-        message: formData.message,
       })
-
       router.push('/transactions')
     } catch (err: any) {
       setError(err.response?.data?.error || err.response?.data?.message || 'Failed to create transaction')
@@ -101,86 +57,76 @@ export default function CreateTransactionPage() {
 
   return (
     <PrivateLayout>
-      <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Link href="/transactions" className="text-accent hover:underline mb-4 inline-block">
-          ← Back to Transactions
+      <div className="section main-container max-w-lg">
+        <Link href="/transactions" className="text-xs text-foreground/40 hover:text-foreground/70 transition-colors mb-6 inline-block">
+          ← transactions
         </Link>
 
-        <div className="card border-2">
-          <h1 className="text-3xl font-bold text-primary mb-2">Create Transaction</h1>
-          <p className="text-muted mb-8">Sign and submit a new blockchain transaction</p>
+        <p className="text-xs uppercase tracking-widest text-foreground/30 font-medium mb-1">New transaction</p>
+        <h1 className="text-2xl font-bold mb-8">Send VRT</h1>
 
-          {error && (
-            <div className="bg-destructive/10 border border-destructive text-destructive px-4 py-3 rounded-lg mb-6">
-              {error}
-            </div>
-          )}
+        {error && (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 mb-6">
+            <p className="text-sm text-destructive">{error}</p>
+          </div>
+        )}
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium mb-2">From Account</label>
-              <input
-                type="text"
-                value={senderAccountID || '—'}
-                className="input-field w-full"
-                disabled
-              />
-              <p className="text-xs text-muted mt-2">Sender is always your authenticated account.</p>
-            </div>
+        <div className="card mb-4">
+          <p className="text-xs uppercase tracking-wide font-medium text-foreground/40 mb-1">From</p>
+          <p className="font-mono text-xs text-foreground/60 break-all">{user?.account_id || '—'}</p>
+          <p className="text-xs text-foreground/30 mt-1">Balance: {user?.balance ?? '—'} VRT · Nonce: {user?.nonce ?? '—'}</p>
+        </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-2">To Account</label>
-              <input
-                type="text"
-                name="toAccountId"
-                value={formData.toAccountId}
-                onChange={handleChange}
-                className="input-field w-full"
-                placeholder="verity_..."
-                required
-              />
-            </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-xs uppercase tracking-wide font-medium text-foreground/50 mb-1.5">
+              Recipient account ID
+            </label>
+            <input
+              type="text"
+              value={toAccount}
+              onChange={e => setToAccount(e.target.value)}
+              className="input-field w-full font-mono"
+              placeholder="verity_…"
+              required
+            />
+          </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-2">Amount</label>
-              <input
-                type="number"
-                name="amount"
-                value={formData.amount}
-                onChange={handleChange}
-                className="input-field w-full"
-                placeholder="0"
-                step="1"
-                required
-              />
-            </div>
+          <div>
+            <label className="block text-xs uppercase tracking-wide font-medium text-foreground/50 mb-1.5">
+              Amount (VRT)
+            </label>
+            <input
+              type="number"
+              value={amount}
+              onChange={e => setAmount(e.target.value)}
+              className="input-field w-full"
+              placeholder="0"
+              min="1"
+              step="1"
+              required
+            />
+          </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-2">Message (Optional)</label>
-              <textarea
-                name="message"
-                value={formData.message}
-                onChange={handleChange}
-                className="input-field w-full"
-                placeholder="Add a memo..."
-                rows={3}
-              />
-            </div>
-
-            <div className="flex gap-4 pt-6 border-t border-border">
+          <div className="pt-4 border-t border-border/40">
+            <p className="text-xs text-foreground/40 mb-4 leading-relaxed">
+              The transaction hash is computed from your account, recipient, amount, nonce, and timestamp before submission. The server re-validates the hash on receipt.
+            </p>
+            <div className="flex gap-3">
               <button
                 type="submit"
                 disabled={loading}
-                className="btn btn-primary flex-1"
+                className="flex-1 py-2.5 rounded-lg font-medium text-sm disabled:opacity-40"
+                style={{ background: '#7c5cfc', color: '#fff' }}
               >
-                {loading ? 'Submitting...' : 'Submit Transaction'}
+                {loading ? 'Submitting…' : 'Submit transaction'}
               </button>
-              <Link href="/transactions" className="btn btn-secondary flex-1 text-center">
+              <Link href="/transactions" className="btn btn-ghost flex-1 text-center text-sm">
                 Cancel
               </Link>
             </div>
-          </form>
-        </div>
+          </div>
+        </form>
       </div>
     </PrivateLayout>
   )
