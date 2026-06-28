@@ -1,27 +1,36 @@
 package routes
 
 import (
-	"net/http"
-	"strconv"
+	"gin-minimal/middleware"
 	"gin-minimal/models"
 	"gin-minimal/services"
+	"net/http"
+	"strconv"
+
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
 func RegisterBlockRoutes(router *gin.Engine, db *gorm.DB) {
-	txnService := services.NewTransactionService(db)
 	acctService := services.NewAccountService(db)
+	txnService := services.NewTransactionService(db, acctService)
 	blockService := services.NewBlockService(db, txnService, acctService)
 
 	// Create block
-	router.POST("/blocks", func(c *gin.Context) {
+	protected := router.Group("/blocks")
+	protected.Use(middleware.AuthMiddleware())
+	protected.POST("", func(c *gin.Context) {
 		var block models.Block
 		if err := c.ShouldBindJSON(&block); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-
+		producerID, err := middleware.GetAccountIDFromContext(c)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			return
+		}
+		block.Producer = producerID
 		createdBlock, err := blockService.CreateBlock(&block)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
