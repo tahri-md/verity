@@ -16,15 +16,9 @@ export default function LoginPage() {
     e.preventDefault()
     setError('')
     setLoading(true)
-
     try {
-      const response = await api.post('/api/auth/login', {
-        email,
-        password,
-      })
-
+      const response = await api.post('/api/auth/login', { email, password })
       if (response.data.token && response.data.user) {
-        // Store full user data including blockchain account details
         localStorage.setItem('token', response.data.token)
         localStorage.setItem('account_id', response.data.user.account_id)
         localStorage.setItem('user', JSON.stringify({
@@ -45,64 +39,107 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <div className="card border-2">
-          <div className="mb-8 text-center">
-            <h1 className="text-3xl font-bold text-primary mb-2">Verity</h1>
-            <p className="text-muted">Blockchain Verification System</p>
+    <div className="min-h-screen bg-background flex">
+
+      <div className="hidden lg:flex flex-col justify-between w-72 flex-shrink-0 p-10 border-r bg-primary/10 border-border/30 relative overflow-hidden">
+        <div className="relative">
+          <div className="flex items-center gap-2">
+            <img src='verity_icon.png' className='w-20'/>
+            <span className="font-semibold text-xl tracking-tight">Verity</span>
+          </div>
+        </div>
+
+        <div className="relative space-y-6">
+          <p className="font-mono text-[11px] text-foreground/30 leading-none uppercase tracking-widest">
+            node / consensus
+          </p>
+          <p className="text-[22px] font-bold leading-snug tracking-tight text-foreground/80">
+            Every block is<br />cryptographically<br />accountable.
+          </p>
+          <p className="text-xs text-foreground/35 leading-relaxed max-w-[180px]">
+            Merkle-verified. ECDSA-signed. Validator-voted. No trust required.
+          </p>
+        </div>
+
+        <p className="relative font-mono text-[10px] text-foreground/20">v1.0.0</p>
+      </div>
+
+      {/* Right — form */}
+      <div className="flex-1 flex items-center justify-center p-8">
+        <div className="w-full max-w-[340px]">
+
+          {/* Mobile logo */}
+          <div className="flex items-center gap-2 mb-10 lg:hidden">
+            <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <path d="M10 2L17 6V14L10 18L3 14V6L10 2Z" stroke="#7c5cfc" strokeWidth="1.5" fill="none" />
+              <path d="M10 6L14 8.5V13.5L10 16L6 13.5V8.5L10 6Z" stroke="#33ffa0" strokeWidth="1" fill="none" />
+            </svg>
+            <span className="font-semibold text-sm tracking-tight">Verity</span>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
-              <div className="bg-destructive/10 border border-destructive text-destructive px-4 py-3 rounded-lg text-sm">
-                {error}
-              </div>
-            )}
+          <div className="mb-8">
+            <h1 className="text-xl font-bold tracking-tight mb-1">Sign in</h1>
+            <p className="text-sm text-foreground/40">Back to your node.</p>
+          </div>
 
+          {error && (
+            <div className="border-l-2 border-destructive pl-3 mb-6">
+              <p className="text-sm text-destructive">{error}</p>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="block text-sm font-medium mb-2">Email</label>
+              <label htmlFor="email" className="block text-[11px] font-mono text-foreground/40 mb-1.5 uppercase tracking-widest">
+                Email
+              </label>
               <input
+                id="email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="input-field w-full"
-                placeholder="your@email.com"
+                placeholder="you@example.com"
                 required
+                className="input-field w-full"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-2">Password</label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label htmlFor="password" className="block text-[11px] font-mono text-foreground/40 uppercase tracking-widest">
+                  Password
+                </label>
+                <Link href="/forgot-password" className="text-[11px] text-foreground/30 hover:text-foreground/60 transition-colors">
+                  Reset
+                </Link>
+              </div>
               <input
+                id="password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="input-field w-full"
                 placeholder="••••••••"
                 required
+                className="input-field w-full"
               />
             </div>
-
-            <Link href="/forgot-password" className="text-sm text-accent hover:underline">
-              Forgot password?
-            </Link>
 
             <button
               type="submit"
               disabled={loading}
-              className="btn btn-primary w-full"
+              className="w-full py-2.5 rounded-md font-medium text-sm transition-opacity disabled:opacity-40 disabled:cursor-not-allowed mt-1"
+              style={{ background: '#7c5cfc', color: '#fff' }}
             >
-              {loading ? 'Logging in...' : 'Login'}
+              {loading ? 'Signing in…' : 'Sign in'}
             </button>
           </form>
 
-          <div className="mt-6 pt-6 border-t border-border text-center">
-            <p className="text-sm text-muted mb-2">Don't have an account?</p>
-            <Link href="/signup" className="text-accent font-medium hover:underline">
-              Sign up here
+          <p className="text-sm text-foreground/35 mt-6">
+            New here?{' '}
+            <Link href="/signup" className="text-foreground/60 font-medium hover:text-foreground transition-colors">
+              Create an account
             </Link>
-          </div>
+          </p>
         </div>
       </div>
     </div>
