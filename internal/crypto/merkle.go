@@ -17,7 +17,7 @@ func Hash(data string) string {
 	return hex.EncodeToString(hash[:])
 }
 func HashTransaction(tx models.Transaction) string {
-	data := tx.FromAccount + tx.ToAccount + strconv.FormatInt(tx.Amount, 10)
+	data := tx.FromAccount + tx.ToAccount + strconv.FormatInt(tx.Amount, 10) + strconv.FormatUint(tx.Nonce, 10) + strconv.FormatInt(tx.Timestamp, 10)
 	hash := sha256.Sum256([]byte(data))
 	return hex.EncodeToString(hash[:])
 }
@@ -62,6 +62,8 @@ func GenerateMerkleProof(hashes []string, target string) ([]string, error) {
 		if index%2 == 0 {
 			if index+1 < len(hashes) {
 				proof = append(proof, hashes[index+1])
+			} else {
+				proof = append(proof, hashes[index])
 			}
 		} else {
 			proof = append(proof, hashes[index-1])
