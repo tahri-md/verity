@@ -7,14 +7,15 @@ import (
 	"gin-minimal/middleware"
 	"gin-minimal/models"
 	"gin-minimal/services"
+	"gin-minimal/validators"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
 func RegisterTransactionRoutes(r *gin.Engine, db *gorm.DB) {
-
-	transactionService := services.NewTransactionService(db)
+	acctService := services.NewAccountService(db)
+	transactionService := services.NewTransactionService(db, acctService)
 
 	api := r.Group("/api/v1/transactions")
 	api.GET("", func(c *gin.Context) {
@@ -25,6 +26,7 @@ func RegisterTransactionRoutes(r *gin.Engine, db *gorm.DB) {
 		}
 		c.JSON(200, transactions)
 	})
+
 	api.GET("/:id", func(c *gin.Context) {
 		id := c.Param("id")
 		transaction, err := transactionService.GetTransactionByID(id)
@@ -102,6 +104,10 @@ func RegisterTransactionRoutes(r *gin.Engine, db *gorm.DB) {
 			return
 		}
 		transaction.FromAccount = accountID
+		if err := validators.ValidateTransaction(transaction.FromAccount, transaction.ToAccount, transaction.Amount, transaction.PublicKey); err != nil {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Transacations is not valid"})
+			return
+		}
 
 		created, err := transactionService.CreateTransaction(&transaction)
 		if err != nil {
