@@ -14,9 +14,9 @@ interface ConsensusState {
   no_votes: number
   is_finalized: boolean
   network_health: string
-  created_at: string
-  updated_at: string
 }
+
+const REQUIRED_VOTES = 3
 
 export default function ConsensusDetailsPage() {
   const params = useParams()
@@ -26,194 +26,205 @@ export default function ConsensusDetailsPage() {
   const [validatorID, setValidatorID] = useState('')
   const [validatorsList, setValidatorsList] = useState('')
   const [actionMsg, setActionMsg] = useState('')
+  const [actionErr, setActionErr] = useState('')
 
-  const fetchProposal = useCallback(async () => {
+  const fetch = useCallback(async () => {
     try {
-      const response = await api.get(`/consensus/${params.id}`)
-      setState(response.data)
-    } catch (err: any) {
+      const r = await api.get(`/consensus/${params.id}`)
+      setState(r.data)
+    } catch {
       setError('Failed to load consensus state')
     } finally {
       setLoading(false)
     }
   }, [params.id])
 
+  useEffect(() => { fetch() }, [fetch])
+
+  // pre-fill validator from localStorage
   useEffect(() => {
-    fetchProposal()
-  }, [fetchProposal])
-
-  const handleVote = async (vote: 'yes' | 'no') => {
     try {
-      setError('')
-      setActionMsg('')
+      const raw = localStorage.getItem('user')
+      if (raw) setValidatorID(JSON.parse(raw)?.account_id || '')
+    } catch {}
+  }, [])
 
-      if (!validatorID.trim()) {
-        setError('Enter a validator id')
-        return
-      }
-
-      await api.post(`/consensus/${params.id}/vote`, {
-        validator_id: validatorID.trim(),
-        vote,
-      })
-
-      setActionMsg('Vote registered')
-      fetchProposal()
+  const act = async (fn: () => Promise<string>) => {
+    setActionErr('')
+    setActionMsg('')
+    try {
+      const msg = await fn()
+      setActionMsg(msg)
+      fetch()
     } catch (err: any) {
-      setError('Failed to cast vote')
+      setActionErr(err?.response?.data?.error || 'Action failed')
     }
   }
 
-  const electLeader = async () => {
-    try {
-      setError('')
-      setActionMsg('')
+  const vote = (v: 'yes' | 'no') => act(async () => {
+    if (!validatorID.trim()) throw new Error('Enter a validator ID')
+    await api.post(`/consensus/${params.id}/vote`, { validator_id: validatorID.trim(), vote: v })
+    return `Vote "${v}" registered`
+  })
 
-      const validators = validatorsList
-        .split(',')
-        .map((v) => v.trim())
-        .filter(Boolean)
+  const electLeader = () => act(async () => {
+    const validators = validatorsList.split(',').map(v => v.trim()).filter(Boolean)
+    if (!validators.length) throw new Error('Enter at least one validator')
+    const res = await api.post(`/consensus/${params.id}/elect-leader`, { validators })
+    return `Leader elected: ${res.data?.leader || ''}`
+  })
 
-      if (validators.length === 0) {
-        setError('Enter at least one validator id')
-        return
-      }
+  const finalize = () => act(async () => {
+    await api.post(`/consensus/${params.id}/finalize`)
+    return 'Block finalized'
+  })
 
-      const res = await api.post(`/consensus/${params.id}/elect-leader`, { validators })
-      setActionMsg(`Leader elected: ${res.data?.leader || ''}`)
-      fetchProposal()
-    } catch (err: any) {
-      setError(err?.response?.data?.error || 'Failed to elect leader')
-    }
-  }
+  if (loading) return (
+    <PrivateLayout>
+      <div className="section main-container flex justify-center">
+        <div className="w-8 h-8 border-2 border-border border-t-primary rounded-full animate-spin mt-12" />
+      </div>
+    </PrivateLayout>
+  )
 
-  const finalize = async () => {
-    try {
-      setError('')
-      setActionMsg('')
-      await api.post(`/consensus/${params.id}/finalize`)
-      setActionMsg('Block finalized')
-      fetchProposal()
-    } catch (err: any) {
-      setError(err?.response?.data?.error || 'Failed to finalize')
-    }
-  }
-
-  if (loading) {
-    return (
-      <PrivateLayout>
-        <div className="max-w-7xl mx-auto px-4 py-8 text-center">
-          <div className="inline-block w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+  if (error || !state) return (
+    <PrivateLayout>
+      <div className="section main-container">
+        <div className="card bg-destructive/5 border-destructive/20 mb-4">
+          <p className="text-destructive text-sm">{error || 'Not found'}</p>
         </div>
-      </PrivateLayout>
-    )
-  }
+        <Link href="/consensus" className="btn btn-ghost btn-sm">← Back</Link>
+      </div>
+    </PrivateLayout>
+  )
 
-  if (error || !state) {
-    return (
-      <PrivateLayout>
-        <div className="max-w-7xl mx-auto px-4 py-8">
-          <div className="bg-destructive/10 border border-destructive text-destructive px-4 py-3 rounded-lg">
-            {error || 'Consensus state not found'}
-          </div>
-          <Link href="/consensus" className="btn btn-primary mt-4">
-            Back to Consensus
-          </Link>
-        </div>
-      </PrivateLayout>
-    )
-  }
+  const pct = Math.min(100, Math.round((state.yes_votes / REQUIRED_VOTES) * 100))
+  const total = state.yes_votes + state.no_votes
 
   return (
     <PrivateLayout>
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Link href="/consensus" className="text-accent hover:underline mb-4 inline-block">
-          ← Back to Consensus
+      <div className="section main-container max-w-3xl">
+        <Link href="/consensus" className="text-xs text-foreground/40 hover:text-foreground/70 transition-colors mb-6 inline-block">
+          ← consensus
         </Link>
 
-        <div className="card border-2 mb-6">
-          <div className="flex justify-between items-start mb-6">
-            <div>
-              <h1 className="text-3xl font-bold text-primary">Consensus State</h1>
-              <p className="text-muted mt-2">Block #{state.block_number}</p>
-            </div>
-            <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-              state.is_finalized ? 'bg-green-500/10 text-green-500' : 'bg-primary/10 text-primary'
-            }`}>
-              {state.is_finalized ? 'finalized' : 'open'}
-            </span>
+        <div className="flex items-start justify-between mb-8">
+          <div>
+            <p className="text-xs uppercase tracking-widest text-foreground/30 font-medium mb-1">Consensus</p>
+            <h1 className="text-2xl font-bold">Block #{state.block_number}</h1>
           </div>
-
-          <div className="grid grid-cols-2 gap-4 py-6 border-y border-border">
-            <div>
-              <p className="text-muted text-sm">Leader</p>
-              <p className="text-foreground mt-1 font-mono break-all">{state.leader || '—'}</p>
-            </div>
-            <div>
-              <p className="text-muted text-sm">Network Health</p>
-              <p className="text-foreground mt-1">{state.network_health || 'healthy'}</p>
-            </div>
-          </div>
+          <span className={`badge ${state.is_finalized ? 'badge-success' : 'badge-primary'}`}>
+            {state.is_finalized ? 'finalized' : 'voting open'}
+          </span>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+
+          {/* Vote status */}
           <div className="card">
-            <h3 className="text-lg font-bold text-primary mb-4">Votes</h3>
-            <div className="space-y-4">
-              <div className="flex justify-between">
-                <span className="text-muted">Yes</span>
-                <span className="font-bold">{state.yes_votes}</span>
+            <p className="text-xs uppercase tracking-wide font-medium text-foreground/40 mb-4">Vote progress</p>
+
+            <div className="flex items-baseline gap-2 mb-2">
+              <span className="text-3xl font-bold font-mono">{state.yes_votes}</span>
+              <span className="text-foreground/40 text-sm">/ {REQUIRED_VOTES} needed</span>
+            </div>
+            <div className="w-full h-2 rounded-full bg-muted/60 overflow-hidden mb-3">
+              <div
+                className="h-full rounded-full transition-all"
+                style={{ width: `${pct}%`, background: state.is_finalized ? '#33ffa0' : '#7c5cfc' }}
+              />
+            </div>
+            <div className="flex justify-between text-xs text-foreground/40">
+              <span>{state.yes_votes} yes · {state.no_votes} no</span>
+              <span>{total} total votes</span>
+            </div>
+
+            {state.leader && (
+              <div className="mt-4 pt-4 border-t border-border/40">
+                <p className="text-xs text-foreground/40 mb-1">Elected leader</p>
+                <p className="font-mono text-xs text-foreground/70 break-all">{state.leader}</p>
               </div>
-              <div className="flex justify-between">
-                <span className="text-muted">No</span>
-                <span className="font-bold">{state.no_votes}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted">View</span>
-                <span className="font-mono">{state.view_number}</span>
-              </div>
+            )}
+
+            <div className="mt-4 pt-4 border-t border-border/40 flex items-center justify-between">
+              <p className="text-xs text-foreground/40">Network health</p>
+              <span className={`badge text-xs ${state.network_health === 'healthy' ? 'badge-success' : 'badge-warning'}`}>
+                {state.network_health || 'healthy'}
+              </span>
             </div>
           </div>
 
+          {/* Actions */}
           <div className="card">
-            <h3 className="text-lg font-bold text-primary mb-4">Actions</h3>
+            <p className="text-xs uppercase tracking-wide font-medium text-foreground/40 mb-4">Actions</p>
 
             {actionMsg && (
-              <div className="bg-green-500/10 border border-green-500 text-green-500 px-4 py-3 rounded-lg mb-4 text-sm">
-                {actionMsg}
+              <div className="rounded-lg px-3 py-2.5 mb-4" style={{ background: 'rgba(51,255,160,0.08)', border: '1px solid rgba(51,255,160,0.25)' }}>
+                <p className="text-xs" style={{ color: '#33ffa0' }}>{actionMsg}</p>
+              </div>
+            )}
+            {actionErr && (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5 mb-4">
+                <p className="text-xs text-destructive">{actionErr}</p>
               </div>
             )}
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-2">Validator ID</label>
+                <label className="block text-xs uppercase tracking-wide font-medium text-foreground/50 mb-1.5">
+                  Your validator ID
+                </label>
                 <input
                   value={validatorID}
-                  onChange={(e) => setValidatorID(e.target.value)}
-                  className="input-field w-full"
-                  placeholder="validator_1"
+                  onChange={e => setValidatorID(e.target.value)}
+                  className="input-field w-full font-mono text-xs"
+                  placeholder="auto-filled from account"
                 />
               </div>
 
               <div className="flex gap-2">
-                <button onClick={() => handleVote('yes')} className="btn btn-secondary flex-1">Vote Yes</button>
-                <button onClick={() => handleVote('no')} className="btn btn-secondary flex-1">Vote No</button>
+                <button
+                  onClick={() => vote('yes')}
+                  disabled={state.is_finalized}
+                  className="flex-1 py-2 rounded-lg text-sm font-medium border transition-colors disabled:opacity-40"
+                  style={{ borderColor: '#33ffa0', color: '#33ffa0' }}
+                >
+                  Vote yes
+                </button>
+                <button
+                  onClick={() => vote('no')}
+                  disabled={state.is_finalized}
+                  className="flex-1 py-2 rounded-lg text-sm font-medium border border-destructive/50 text-destructive transition-colors disabled:opacity-40"
+                >
+                  Vote no
+                </button>
               </div>
 
-              <div className="pt-4 border-t border-border">
-                <label className="block text-sm font-medium mb-2">Validators (comma-separated)</label>
-                <input
-                  value={validatorsList}
-                  onChange={(e) => setValidatorsList(e.target.value)}
-                  className="input-field w-full"
-                  placeholder="validator_1, validator_2"
-                />
-                <button onClick={electLeader} className="btn btn-secondary w-full mt-3">Elect Leader</button>
+              <div className="pt-4 border-t border-border/40 space-y-3">
+                <div>
+                  <label className="block text-xs uppercase tracking-wide font-medium text-foreground/50 mb-1.5">
+                    Validators (comma-separated)
+                  </label>
+                  <input
+                    value={validatorsList}
+                    onChange={e => setValidatorsList(e.target.value)}
+                    className="input-field w-full font-mono text-xs"
+                    placeholder="validator_1, validator_2, …"
+                  />
+                </div>
+                <button onClick={electLeader} disabled={state.is_finalized} className="btn btn-ghost btn-sm w-full disabled:opacity-40">
+                  Elect leader
+                </button>
               </div>
 
-              <div className="pt-4 border-t border-border">
-                <button onClick={finalize} className="btn btn-primary w-full" disabled={state.is_finalized}>
-                  {state.is_finalized ? 'Finalized' : 'Finalize Block'}
+              <div className="pt-4 border-t border-border/40">
+                <button
+                  onClick={finalize}
+                  disabled={state.is_finalized}
+                  className="w-full py-2.5 rounded-lg font-medium text-sm disabled:opacity-40"
+                  style={{ background: '#7c5cfc', color: '#fff' }}
+                >
+                  {state.is_finalized ? 'Already finalized' : 'Finalize block'}
                 </button>
               </div>
             </div>
