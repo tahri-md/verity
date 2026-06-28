@@ -5,55 +5,127 @@ import (
 	"gin-minimal/internal/crypto"
 	"gin-minimal/models"
 	"time"
+
 	"gorm.io/gorm"
 )
 
 type BlockService struct {
-	db               *gorm.DB
-	transactionSvc   *TransactionService
-	accountSvc       *AccountService
+	db             *gorm.DB
+	transactionSvc *TransactionService
+	accountSvc     *AccountService
 }
 
 func NewBlockService(db *gorm.DB, txnSvc *TransactionService, acctSvc *AccountService) *BlockService {
 	return &BlockService{
-		db:               db,
-		transactionSvc:   txnSvc,
-		accountSvc:       acctSvc,
+		db:             db,
+		transactionSvc: txnSvc,
+		accountSvc:     acctSvc,
 	}
 }
 
-// CreateBlock creates a new block with validation
 func (s *BlockService) CreateBlock(block *models.Block) (*models.Block, error) {
-	if block.BlockNumber == 0 {
-		return nil, errors.New("invalid block number")
-	}
-
 	if len(block.Transactions) == 0 {
 		return nil, errors.New("block must contain at least one transaction")
 	}
 
-	// Validate all transactions and calculate merkle root
-	var hashes []string
-	for _, txn := range block.Transactions {
-		// Update transaction status and block number
-		txn.BlockNumber = int64(block.BlockNumber)
-		txn.Status = "confirmed"
-		hashes = append(hashes, txn.Hash)
-	}
-
-	// Build merkle root
-	block.MerkleRoot = crypto.BuildMerkleRoot(hashes)
-	block.Timestamp = time.Now()
-
-	if err := s.db.Create(block).Error; err != nil {
+	latest, err := s.GetLatestBlock()
+	if err != nil && err.Error() != "no blocks found" {
 		return nil, err
 	}
 
-	// Update all transactions in the block
-	for _, txn := range block.Transactions {
-		if err := s.db.Model(&txn).Updates(txn).Error; err != nil {
-			return nil, err
+	if err == nil {
+		if block.BlockNumber != latest.BlockNumber+1 {
+			return nil, errors.New("block number must be exactly one greater than the latest block")
 		}
+		if block.ParentHash != latest.BlockHash {
+			return nil, errors.New("parent hash does not match the latest block hash")
+		}
+	} else {
+		if block.BlockNumber != 1 {
+			return nil, errors.New("first block must have block number 1")
+		}
+		if block.ParentHash != "" {
+			return nil, errors.New("genesis block must have empty parent hash")
+		}
+	}
+
+	seenSenders := make(map[string]int64)
+
+	for i := range block.Transactions {
+		txn := &block.Transactions[i]
+
+		if txn.Status != "pending" {
+			return nil, errors.New("transaction " + txn.TxnID + " is not in pending status")
+		}
+
+		if !crypto.VerifyTransactionSignature(txn) {
+			return nil, errors.New("invalid signature on transaction " + txn.TxnID)
+		}
+
+		seenSenders[txn.FromAccount] += txn.Amount
+
+		fromAccount, err := s.accountSvc.GetAccount(txn.FromAccount)
+		if err != nil {
+			return nil, errors.New("account not found for transaction " + txn.TxnID)
+		}
+
+		if seenSenders[txn.FromAccount] > fromAccount.Balance {
+			return nil, errors.New("insufficient balance for account " + txn.FromAccount + " across block transactions")
+		}
+	}
+
+	var hashes []string
+	for _, txn := range block.Transactions {
+		hashes = append(hashes, txn.Hash)
+	}
+
+	block.MerkleRoot = crypto.BuildMerkleRoot(hashes)
+	block.BlockHash = crypto.Hash(block.ParentHash + block.MerkleRoot)
+	block.Timestamp = time.Now()
+	block.Finality = "tentative"
+
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(block).Error; err != nil {
+			return err
+		}
+
+		for i := range block.Transactions {
+			txn := &block.Transactions[i]
+			txn.BlockNumber = int64(block.BlockNumber)
+			txn.Status = "confirmed"
+
+			if err := tx.Model(txn).Updates(map[string]interface{}{
+				"block_number": txn.BlockNumber,
+				"status":       "confirmed",
+			}).Error; err != nil {
+				return err
+			}
+
+			if err := tx.Model(&models.Account{}).
+				Where("account_id = ?", txn.FromAccount).
+				UpdateColumn("balance", gorm.Expr("balance - ?", txn.Amount)).
+				Error; err != nil {
+				return err
+			}
+
+			if err := tx.Model(&models.Account{}).
+				Where("account_id = ?", txn.ToAccount).
+				UpdateColumn("balance", gorm.Expr("balance + ?", txn.Amount)).
+				Error; err != nil {
+				return err
+			}
+
+			if err := tx.Model(&models.Account{}).
+				Where("account_id = ?", txn.FromAccount).
+				UpdateColumn("nonce", gorm.Expr("nonce + 1")).
+				Error; err != nil {
+				return err
+			}
+		}
+
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 
 	return block, nil
