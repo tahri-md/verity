@@ -3,18 +3,20 @@ package services
 import (
 	"encoding/json"
 	"errors"
+	"gin-minimal/internal/crypto"
 	"gin-minimal/models"
+
 	"gorm.io/gorm"
 )
 
 type LedgerService struct {
-	db        *gorm.DB
+	db         *gorm.DB
 	accountSvc *AccountService
 }
 
 func NewLedgerService(db *gorm.DB, acctSvc *AccountService) *LedgerService {
 	return &LedgerService{
-		db:        db,
+		db:         db,
 		accountSvc: acctSvc,
 	}
 }
@@ -113,7 +115,6 @@ func (s *LedgerService) ValidateLedgerState(state *models.LedgerState) (bool, er
 
 // ComputeLedgerStateHash computes the hash of ledger state based on account balances
 func (s *LedgerService) ComputeLedgerStateHash(blockNumber uint64) (string, error) {
-	// Get all accounts and create state hash
 	accounts, err := s.accountSvc.GetAllAccounts()
 	if err != nil {
 		return "", err
@@ -124,9 +125,7 @@ func (s *LedgerService) ComputeLedgerStateHash(blockNumber uint64) (string, erro
 		return "", err
 	}
 
-	// In a real implementation, you would hash this data
-	// For now, return the hashed data as string
-	return string(stateBytes), nil
+	return crypto.Hash(string(stateBytes)), nil // ← was: return string(stateBytes), nil
 }
 
 // RollbackToState rolls back to a previous ledger state (admin only)
@@ -136,23 +135,37 @@ func (s *LedgerService) RollbackToState(stateHash string) error {
 		return err
 	}
 
-	// Restore account states from the ledger state
-	var stateData map[string]interface{}
-	if err := json.Unmarshal([]byte(state.StateData), &stateData); err != nil {
-		return err
+	// StateData is a JSON array of Account objects saved at snapshot time
+	var accounts []models.Account
+	if err := json.Unmarshal([]byte(state.StateData), &accounts); err != nil {
+		return errors.New("failed to parse state data: " + err.Error())
 	}
 
-	// Update all accounts to match the restored state
-	// This is a simplified implementation
-	return nil
+	// Restore each account's balance and nonce inside a single DB transaction so rollback is atomic either all accounts are restored or none are
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		for _, acc := range accounts {
+			if err := tx.Model(&models.Account{}).
+				Where("account_id = ?", acc.AccountID).
+				Updates(map[string]interface{}{
+					"balance": acc.Balance,
+					"nonce":   acc.Nonce,
+				}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 // GetLedgerStateHistory retrieves the history of ledger states
 func (s *LedgerService) GetLedgerStateHistory(blockNumber uint64, depth int) ([]models.LedgerState, error) {
 	var states []models.LedgerState
-	startBlock := blockNumber - uint64(depth)
-	if startBlock < 0 {
+
+	var startBlock uint64
+	if uint64(depth) >= blockNumber { // ← was: startBlock := blockNumber - uint64(depth); if startBlock < 0
 		startBlock = 0
+	} else {
+		startBlock = blockNumber - uint64(depth)
 	}
 
 	if err := s.db.Where("block_number BETWEEN ? AND ?", startBlock, blockNumber).
