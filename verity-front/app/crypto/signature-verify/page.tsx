@@ -6,35 +6,21 @@ import PrivateLayout from '@/components/PrivateLayout'
 import { api } from '@/lib/api'
 
 export default function SignatureVerifyPage() {
-  const [formData, setFormData] = useState({
-    message: '',
-    signature: '',
-    publicKey: '',
-  })
-  const [result, setResult] = useState<{ valid: boolean; message: string } | null>(null)
+  const [message, setMessage] = useState('')
+  const [signature, setSignature] = useState('')
+  const [publicKey, setPublicKey] = useState('')
+  const [result, setResult] = useState<{ valid: boolean } | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    })
-  }
 
   const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     setResult(null)
     setLoading(true)
-
     try {
-      const response = await api.post('/api/crypto/verify-signature', {
-        message: formData.message,
-        signature: formData.signature,
-        publicKey: formData.publicKey,
-      })
-      setResult(response.data)
+      const res = await api.post('/api/crypto/verify-signature', { message, signature, publicKey })
+      setResult(res.data)
     } catch (err: any) {
       setError(err.response?.data?.message || 'Verification failed')
     } finally {
@@ -44,92 +30,55 @@ export default function SignatureVerifyPage() {
 
   return (
     <PrivateLayout>
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Link href="/dashboard" className="text-accent hover:underline mb-4 inline-block">
-          ← Back to Dashboard
+      <div className="section main-container max-w-2xl">
+        <Link href="/dashboard" className="text-xs text-foreground/40 hover:text-foreground/70 transition-colors mb-6 inline-block">
+          ← dashboard
         </Link>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <div className="card border-2">
-            <h1 className="text-3xl font-bold text-primary mb-6">Signature Verification</h1>
+        <p className="text-xs uppercase tracking-widest text-foreground/30 font-medium mb-1">Crypto tools</p>
+        <h1 className="text-2xl font-bold mb-2">Signature verification</h1>
+        <p className="text-sm text-foreground/50 mb-8">Verify an ECDSA P-256 signature against a message hash and public key.</p>
 
-            {error && (
-              <div className="bg-destructive/10 border border-destructive text-destructive px-4 py-3 rounded-lg mb-6">
-                {error}
-              </div>
-            )}
-
-            <form onSubmit={handleVerify} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-2">Message or Hash</label>
-                <textarea
-                  name="message"
-                  value={formData.message}
-                  onChange={handleChange}
-                  className="input-field w-full"
-                  placeholder="Either a raw message, or a 64-hex sha256 digest"
-                  rows={3}
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-2">Signature (Hex)</label>
-                <textarea
-                  name="signature"
-                  value={formData.signature}
-                  onChange={handleChange}
-                  className="input-field w-full font-mono text-xs"
-                  placeholder="0x..."
-                  rows={3}
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-2">Public Key (Hex)</label>
-                <textarea
-                  name="publicKey"
-                  value={formData.publicKey}
-                  onChange={handleChange}
-                  className="input-field w-full font-mono text-xs"
-                  placeholder="0x..."
-                  rows={3}
-                  required
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="btn btn-primary w-full"
-              >
-                {loading ? 'Verifying...' : 'Verify Signature'}
-              </button>
-            </form>
+        {error && (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 mb-6">
+            <p className="text-sm text-destructive">{error}</p>
           </div>
+        )}
 
+        <form onSubmit={handleVerify} className="card space-y-4 mb-4">
           <div>
-            {result && (
-              <div className={`card border-2 ${result.valid ? 'border-green-500' : 'border-destructive'}`}>
-                <div className={`text-center ${result.valid ? 'text-green-500' : 'text-destructive'}`}>
-                  <h2 className="text-2xl font-bold mb-2">
-                    {result.valid ? 'Valid Signature' : 'Invalid Signature'}
-                  </h2>
-                  <p className="text-sm">{result.message}</p>
-                </div>
-              </div>
-            )}
-
-            {!result && (
-              <div className="card">
-                <p className="text-muted text-center">
-                  Fill in the form and click verify to validate the signature
-                </p>
-              </div>
-            )}
+            <label className="block text-xs uppercase tracking-wide font-medium text-foreground/50 mb-1.5">Message or hash (hex)</label>
+            <textarea value={message} onChange={e => setMessage(e.target.value)} className="input-field w-full font-mono text-xs" rows={2} placeholder="Raw message or 64-char SHA-256 hex digest" required />
           </div>
-        </div>
+          <div>
+            <label className="block text-xs uppercase tracking-wide font-medium text-foreground/50 mb-1.5">Signature (hex)</label>
+            <textarea value={signature} onChange={e => setSignature(e.target.value)} className="input-field w-full font-mono text-xs" rows={3} placeholder="128-char hex (r || s)" required />
+          </div>
+          <div>
+            <label className="block text-xs uppercase tracking-wide font-medium text-foreground/50 mb-1.5">Public key (hex)</label>
+            <textarea value={publicKey} onChange={e => setPublicKey(e.target.value)} className="input-field w-full font-mono text-xs" rows={3} placeholder="Uncompressed P-256 key (130 hex chars)" required />
+          </div>
+          <button type="submit" disabled={loading} className="w-full py-2.5 rounded-lg font-medium text-sm disabled:opacity-40" style={{ background: '#7c5cfc', color: '#fff' }}>
+            {loading ? 'Verifying…' : 'Verify signature'}
+          </button>
+        </form>
+
+        {result && (
+          <div
+            className="rounded-lg px-4 py-4 text-center"
+            style={{
+              background: result.valid ? 'rgba(51,255,160,0.08)' : 'rgba(239,68,68,0.08)',
+              border: `1px solid ${result.valid ? 'rgba(51,255,160,0.3)' : 'rgba(239,68,68,0.3)'}`,
+            }}
+          >
+            <p className="text-lg font-bold" style={{ color: result.valid ? '#33ffa0' : '#ef4444' }}>
+              {result.valid ? '✓ Valid signature' : '✗ Invalid signature'}
+            </p>
+            <p className="text-xs text-foreground/50 mt-1">
+              {result.valid ? 'The signature matches the public key for this message.' : 'Signature does not match this public key and message.'}
+            </p>
+          </div>
+        )}
       </div>
     </PrivateLayout>
   )
