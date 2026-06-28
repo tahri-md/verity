@@ -4,23 +4,81 @@ import (
 	"errors"
 	"gin-minimal/internal/crypto"
 	"gin-minimal/models"
+	"gin-minimal/validators"
+	"time"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
 type TransactionService struct {
-	db *gorm.DB
+	db             *gorm.DB
+	accountService *AccountService
 }
 
-func NewTransactionService(db *gorm.DB) *TransactionService {
-	return &TransactionService{db: db}
+func NewTransactionService(db *gorm.DB, acx *AccountService) *TransactionService {
+	return &TransactionService{db: db, accountService: acx}
 }
+
 func (s *TransactionService) CreateTransaction(txn *models.Transaction) (*models.Transaction, error) {
+	if err := validators.ValidateTransaction(
+		txn.FromAccount,
+		txn.ToAccount,
+		txn.Amount,
+		txn.PublicKey,
+	); err != nil {
+		return nil, err
+	}
+
+	if _, err := s.accountService.GetAccount(txn.ToAccount); err != nil {
+		return nil, errors.New("destination account does not exist")
+	}
+
+	fromAccount, err := s.accountService.GetAccount(txn.FromAccount)
+	if err != nil {
+		return nil, errors.New("source account does not exist")
+	}
+
+	if txn.Nonce != fromAccount.Nonce {
+		return nil, errors.New("invalid nonce: expected next nonce for account")
+	}
+
+	now := time.Now().Unix()
+	diff := now - txn.Timestamp
+	if diff < -300 || diff > 300 {
+		return nil, errors.New("transaction timestamp is too old or too far in the future")
+	}
+
+	expectedHash := crypto.HashTransaction(*txn)
+	if txn.Hash != expectedHash {
+		return nil, errors.New("transaction hash does not match transaction data")
+	}
+
+	if !crypto.VerifyTransactionSignature(txn) {
+		return nil, errors.New("invalid transaction signature")
+	}
+
+	if fromAccount.Balance < txn.Amount {
+		return nil, errors.New("insufficient balance")
+	}
+
+	var existing models.Transaction
+	if err := s.db.Where("txn_id = ? OR hash = ?", txn.TxnID, txn.Hash).
+		First(&existing).Error; err == nil {
+		return nil, errors.New("duplicate transaction")
+	}
+
+	txn.TxnID = uuid.New().String()
+	txn.Status = "pending"
+	txn.BlockNumber = 0
+
 	if err := s.db.Create(txn).Error; err != nil {
 		return nil, err
 	}
+
 	return txn, nil
 }
+
 func (s *TransactionService) GetAllTransactions() ([]models.Transaction, error) {
 	var transactions []models.Transaction
 	if err := s.db.Find(&transactions).Error; err != nil {
@@ -77,7 +135,7 @@ func (s *TransactionService) GetTransactionProof(txnID string) (*models.MerklePr
 			}
 			return positions
 		}(),
-		MerkleRoot:    root,
+		MerkleRoot: root,
 	}, nil
 
 }
